@@ -1,0 +1,16 @@
+# 运行产物（每次 run 的日志/索引/批次摘要）
+/logs/
+
+# 本地环境覆盖（可能含机器相关路径，不提交）
+/script/jammers.local.json
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# 编辑器/系统
+.DS_Store
+*.swp

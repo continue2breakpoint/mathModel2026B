@@ -1,0 +1,21 @@
+{
+  "tag": "example",
+  "mode": "mock",
+  "seeds": "1-10",
+  "n_jammers": null,
+  "directional": false,
+  "repeat": 1,
+  "jobs": 4,
+  "grid": {
+    "scan_radius": [1125, 1200, 1300, 1400],
+    "travel_weight": [0.0003333333333, 0.0008333333333],
+    "localize_before_full_scan": [true, false]
+  },
+  "fixed": {
+    "clear_tolerance_m": 20.0,
+    "max_range_bound_m": 1500.0
+  },
+  "notes": {
+    "purpose": "规格文件示例：把一组实验参数版本化保存，之后用 --spec script/specs/example.json 复跑"
+  }
+}

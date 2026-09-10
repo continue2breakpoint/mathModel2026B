@@ -1,8 +1,8 @@
 [project]
 name = "mathmodel2026b"
-version = "0.1.0"
+version = "0.2.0"
 description = "2026 CUMCM Problem B lightweight simulator/planning framework"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
@@ -11,3 +11,4 @@ dev = ["pytest>=8.0"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = "-q"
