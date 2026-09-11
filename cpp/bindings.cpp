@@ -57,6 +57,14 @@ PYBIND11_MODULE(geom_cpp, m) {
           py::arg("bound_sides") = 96,
           "Intersect all +/-half_width wedges with a circumscribed bound circle.");
 
+    m.def("clip_region_by_disk",
+          &geom::clip_region_by_disk,
+          py::arg("region"),
+          py::arg("center"),
+          py::arg("radius"),
+          py::arg("sides") = 240,
+          "Intersect a convex region with a circumscribed regular polygon approximating a disk.");
+
     m.def("point_in_region", &geom::point_in_region,
           py::arg("point"), py::arg("region"), py::arg("eps") = 1e-8);
 

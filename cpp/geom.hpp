@@ -163,6 +163,36 @@ inline ConvexRegion build_region(const std::vector<Observation>& observations,
     return ConvexRegion{std::move(poly), true, false, 0};
 }
 
+inline std::vector<Vec2> intersect_convex_polygons(
+    const std::vector<Vec2>& subject,
+    const std::vector<Vec2>& clip) {
+    if (subject.size() < 3 || clip.size() < 3) return {};
+    std::vector<Vec2> out = subject;
+    const std::size_t n = clip.size();
+    for (std::size_t i = 0; i < n; ++i) {
+        const Vec2 a = clip[i];
+        const Vec2 b = clip[(i + 1) % n];
+        const double dx = b.x - a.x;
+        const double dy = b.y - a.y;
+        // Keep points on the left of directed edge a->b.
+        const HalfPlane hp{-dy, dx, dy * a.x - dx * a.y};
+        out = clip_halfplane(out, hp);
+        if (out.size() < 3) return {};
+    }
+    return out;
+}
+
+inline ConvexRegion clip_region_by_disk(const ConvexRegion& region,
+                                        const Vec2& center,
+                                        double radius,
+                                        int sides = 240) {
+    if (region.is_empty()) return region;
+    const auto disk_poly = polygon_circle(center, radius, sides);
+    auto out = intersect_convex_polygons(region.vertices, disk_poly);
+    if (out.size() < 3) return ConvexRegion{{}, true, true, 0};
+    return ConvexRegion{std::move(out), true, false, 0};
+}
+
 inline bool point_in_region(const Vec2& q, const ConvexRegion& region, double eps = 1e-8) {
     if (region.is_empty()) return false;
     const auto& p = region.vertices;
