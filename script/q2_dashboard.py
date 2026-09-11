@@ -82,7 +82,7 @@ RHO_MIN = zones.RHO_MIN
 RHO_MAX = zones.RHO_MAX
 EPS_DEG = zones.EPS_DEG
 CLEAR_RADIUS = 20.0
-APP_VERSION = "2026-09-11-rho-zones-v4"
+APP_VERSION = "2026-09-11-rho-zones-v5"
 
 MODEL_UNIFORM = zones.MODEL_UNIFORM
 MODEL_FIXED = zones.MODEL_FIXED
@@ -447,7 +447,27 @@ def api_heatmap() -> Response:
     # point, so the polygon vertices alone determine the region exactly.
     certain_centers = [tuple(v) for v in zm.near_poly]
     certain_poly = zones.disks_intersection_polygon(certain_centers, rho_min)
-    source_poly = zm.outer_poly
+
+    # Possible source set A(rho) drawn on the map: the sector W(S1,theta1,+-1deg)
+    # ∩ D(S1,rho) ∩ target disk.  With rho assumed known there is a single
+    # radius rho_fixed; otherwise the interval gives the two bounds rho_min and
+    # rho_max (the possible set is monotone in rho, so these bracket it).
+    if rho_model == MODEL_FIXED:
+        source_polys = [{
+            "rho": rho_fixed,
+            "label": f"ρ_fixed={rho_fixed:.0f} m",
+            "poly": zones.possible_set_polygon(
+                s1, theta1, rho_fixed, EPS_DEG, R_TARGET),
+        }]
+    else:
+        source_polys = [
+            {"rho": rho_min, "label": f"ρ_min={rho_min:.0f} m", "poly": zm.near_poly},
+            {"rho": rho_max, "label": f"ρ_max={rho_max:.0f} m", "poly": zm.outer_poly},
+        ]
+    source_polys = [
+        {"rho": p["rho"], "label": p["label"], "poly": p["poly"].tolist()}
+        for p in source_polys if p["poly"].size
+    ]
     recommended = [_local_to_world(s1, theta1, loc) for loc in RECOMMENDED_LOCAL]
 
     def _clean(arr: np.ndarray) -> list:
@@ -495,7 +515,7 @@ def api_heatmap() -> Response:
         "zone": zone.tolist(),
         "in_target": in_target.tolist(),
         "certain_poly": certain_poly.tolist() if certain_poly.size else [],
-        "source_poly": source_poly.tolist() if source_poly.size else [],
+        "source_polys": source_polys,
         "recommended": [list(p) for p in recommended],
         "metric": metric,
         "stat": stat,
@@ -627,7 +647,7 @@ HTML_PAGE = r"""<!doctype html>
     button:disabled { opacity:.55; cursor:wait; }
     .hint { font-size:11.5px; color:#697386; line-height:1.5; margin-top:4px; }
     .status { font-size:12px; color:#4b5563; min-height:16px; margin-top:6px; }
-    #plot { width:100%; height:76vh; min-height:520px; background:#fff; border-radius:10px; box-shadow:0 2px 12px rgba(0,0,0,.06); }
+    #plot { width:100%; height:82vh; min-height:620px; background:#fff; border-radius:10px; box-shadow:0 2px 12px rgba(0,0,0,.06); }
     .legend { font-size:12px; color:#4b5563; margin-top:8px; line-height:1.6; }
     .badge { display:inline-block; background:#eef2ff; color:#2f4aa8; border-radius:5px; padding:2px 6px; margin:2px 4px 2px 0; font-size:11.5px; }
     .badge.green { background:#e6f7ee; color:#15803d; }
@@ -715,13 +735,13 @@ HTML_PAGE = r"""<!doctype html>
       <span style="font-size:12.5px">+0.5 线</span>
       <input id="pdetHalf" type="checkbox" checked>
     </div>
-    <label class="chk"><input id="showSourceSet" type="checkbox" checked> 干扰源可能集 A1（P1 射线 ±1° ∩ 1500 m）</label>
-    <label class="chk"><input id="showTargetCircle" type="checkbox" checked> 场地圆 u²+v²=1800²</label>
+    <label class="chk"><input id="showSourceSet" type="checkbox" checked> 干扰源可能集 A1 = P1 射线 ±1° ∩ ρ</label>
+    <label class="chk"><input id="showTargetCircle" type="checkbox" checked> 场地圆 x²+y²=1800²</label>
     <label class="chk"><input id="limitTarget" type="checkbox" checked> 只计算 S2 在场地圆内的格点</label>
     <label class="chk"><input id="showRec" type="checkbox" checked> 标注推荐候选 S2（局部 (850,±520)）</label>
 
     <h2>5. 掩膜与数值</h2>
-    <label class="chk"><input id="maskAngle" type="checkbox"> 屏蔽近平行交会带（局部 |u−855|≤√3|v| 之外）</label>
+    <label class="chk"><input id="maskAngle" type="checkbox"> 屏蔽近平行交会带（局部 |x沿−855|≤√3|y横| 之外）</label>
     <label class="chk"><input id="maskPdet" type="checkbox"> 屏蔽 p_det 低于阈值的格点</label>
     <div class="row">
       <span style="font-size:12.5px">p_det 阈值</span>
@@ -732,7 +752,7 @@ HTML_PAGE = r"""<!doctype html>
     <label>热图网格分辨率 <span id="resVal">27</span> × <span id="resVal2">27</span></label>
     <input id="res" type="range" min="11" max="91" step="2" value="27">
 
-    <h2>6. 绘图范围（绝对坐标 u,v）</h2>
+    <h2>6. 绘图范围（场地绝对坐标 x, y）</h2>
     <div class="row">
       <input class="num" id="uMin" type="number" value="-1800" step="50">
       <input class="num" id="uMax" type="number" value="1800" step="50">
@@ -764,7 +784,7 @@ HTML_PAGE = r"""<!doctype html>
       <b>白色点线</b>：p_det 等值线；
       <b class="zp">黄色</b>：概率测得区；
       <b class="zb">半透明红</b>：必然无信号区（所有可能源点都超出 ρ_max，第二次测量无信息，不渲染热值）；
-      <b>橙色虚线</b>：场地圆；<b>紫色点划线</b>：干扰源可能集 A1 的边界；<b>红色星号</b>：推荐候选 S2；<b>灰色</b>：被掩膜或无法定位的格点。
+      <b>橙色虚线</b>：场地圆 x²+y²=1800²；<b>紫色点划线</b>：干扰源可能集 A1 的边界（ρ 固定时只画 ρ_fixed 一条；ρ 不确定时同时画出 ρ_min 与 ρ_max 两条，可能源集即夹在两者之间）；<b>红色星号</b>：推荐候选 S2；<b>灰色</b>：被掩膜或无法定位的格点。
     </div>
   </main>
 </div>
@@ -1016,14 +1036,18 @@ function renderHeat(data) {
       name: "一定测不到区边界（ρ_max=1500）"
     });
   }
-  // source set A1
-  if ($("showSourceSet").checked && data.source_poly.length > 2) {
-    const px = data.source_poly.map(p => p[0]);
-    const py = data.source_poly.map(p => p[1]);
-    traces.push({
-      type: "scatter", mode: "lines", x: px.concat([px[0]]), y: py.concat([py[0]]),
-      line: {color: "#7b1fa2", width: 1.6, dash: "dashdot"},
-      name: "干扰源可能集 A1"
+  // source set A(rho): one dashed outline per admissible rho
+  if ($("showSourceSet").checked && (data.source_polys || []).length) {
+    data.source_polys.forEach((entry, i) => {
+      const poly = entry.poly;
+      if (!poly || poly.length < 3) return;
+      const px = poly.map(p => p[0]);
+      const py = poly.map(p => p[1]);
+      traces.push({
+        type: "scatter", mode: "lines", x: px.concat([px[0]]), y: py.concat([py[0]]),
+        line: {color: i === 0 ? "#7b1fa2" : "#b39ddb", width: 1.6, dash: "dashdot"},
+        name: "干扰源可能集 A1（" + entry.label + "）"
+      });
     });
   }
   // target circle
@@ -1065,12 +1089,13 @@ function renderHeat(data) {
   }
 
   Plotly.react("plot", traces, {
-    margin: {l:60,r:20,t:52,b:52},
-    xaxis: {title: "u = S2.x  (m)", zeroline:true, zerolinecolor:"#cccccc", scaleanchor: "y", scaleratio: 1},
-    yaxis: {title: "v = S2.y  (m)", zeroline:true, zerolinecolor:"#cccccc"},
+    margin: {l:64,r:24,t:52,b:150},
+    xaxis: {title: "x (m)", zeroline:true, zerolinecolor:"#cccccc", scaleanchor: "y", scaleratio: 1},
+    yaxis: {title: "y (m)", zeroline:true, zerolinecolor:"#cccccc"},
     paper_bgcolor: "white", plot_bgcolor: "white", showlegend: true,
-    legend: {orientation: "h", yanchor: "bottom", y: 1.02, xanchor: "left", x: 0, font: {size: 11}},
-    title: {text: "第二检测点绝对场地坐标热图（ρ_min=" + fmt(data.rho.min,0) + " m, ρ_max=" + fmt(data.rho.max,0) + " m, 模型=" + data.rho.model + "）", font: {size: 14}}
+    legend: {orientation: "h", yanchor: "top", y: -0.08, xanchor: "center", x: 0.5,
+             font: {size: 10.5}, tracegroupgap: 2},
+    title: {text: "第二检测点位置热图（x, y 为场地绝对坐标；ρ_min=" + fmt(data.rho.min,0) + " m, ρ_max=" + fmt(data.rho.max,0) + " m, 模型=" + data.rho.model + "）", font: {size: 14}}
   }, {responsive:true, displaylogo:false});
 
   const c = data.counts, a = data.areas_km2;

@@ -189,9 +189,15 @@ sandbox.globalThis = sandbox;
     const last = traceLog[traceLog.length - 1];
     ok("rendered " + last.n + " traces: " + last.names.join(", "));
     for (const need of ["一定测到区边界（ρ_min）", "一定测不到区边界（ρ_max=1500）",
-                        "一定测不到（无信息）", "干扰源可能集 A1", "场地圆 R=1800 m"]) {
-      if (!last.names.includes(need)) fail("missing trace: " + need);
+                        "一定测不到（无信息）", "场地圆 R=1800 m"]) {
+      if (!last.names.some(n => n.startsWith(need))) fail("missing trace: " + need);
     }
+    // probabilistic rho: the possible source set must be drawn twice
+    const a1 = last.names.filter(n => n.startsWith("干扰源可能集 A1"));
+    if (a1.length !== 2) fail("expected 2 A1 outlines for an uncertain rho, got " + a1.length);
+    else if (!a1[0].includes("ρ_min=") || !a1[1].includes("ρ_max=")) {
+      fail("A1 outline labels must carry the rho bounds: " + a1.join(" | "));
+    } else ok("A1 drawn at both rho bounds: " + a1.join(" | "));
   }
 
   if (fetchLog.filter(u => u === "/api/heatmap").length < 1) fail("no /api/heatmap call");
@@ -216,6 +222,17 @@ sandbox.globalThis = sandbox;
     const st = await settle();
     if (/错误/.test(st) || /计算中/.test(st)) fail(`model=${model} metric=${metric}: ${st}`);
     else ok(`model=${model} metric=${metric}: ${st}`);
+    const names = (traceLog[traceLog.length - 1] || { names: [] }).names;
+    const a1 = names.filter(n => n.startsWith("干扰源可能集 A1"));
+    if (model === "fixed" && a1.length !== 1) {
+      fail(`fixed rho must draw exactly one A1 outline, got ${a1.length}`);
+    } else if (model === "fixed" && !a1[0].includes("ρ_fixed")) {
+      fail("fixed-rho A1 label must carry rho_fixed: " + a1[0]);
+    } else if (model !== "fixed" && a1.length !== 2) {
+      fail(`${model} rho must draw two A1 outlines, got ${a1.length}`);
+    } else {
+      ok(`  A1 outlines (${model}): ${a1.join(" | ")}`);
+    }
   }
 
   console.log(process.exitCode ? "RESULT: failures above" : "RESULT: headless page test passed");
