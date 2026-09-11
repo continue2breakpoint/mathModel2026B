@@ -204,9 +204,27 @@ class JammersPaths:
         return self.client_dir / "config.example.json"
 
     @property
+    def workspace_session(self) -> Path:
+        """仓库内会话文件路径（login-jammers 的 .gitignore 已排除 *jm.session.json）。"""
+        return self.client_dir / "jm.session.json"
+
+    @property
     def default_session(self) -> Path:
-        cache = os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
-        return Path(cache) / "jammers" / "session.json"
+        """会话文件路径。
+
+        优先用仓库内的 ``linux-client/jm.session.json``：默认的
+        ``~/.cache/jammers/session.json`` 在受限环境/容器里常常不可写，
+        会导致"登录已成功、却因为写会话失败而报错"。仓库内会话文件不存在、
+        且 XDG 缓存目录可写时，才回退到缓存路径。
+        """
+        workspace = self.workspace_session
+        cache_root = Path(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")))
+        cached = cache_root / "jammers" / "session.json"
+        if cached.exists():
+            return cached
+        if os.access(cache_root, os.W_OK) and cache_root.exists():
+            return cached
+        return workspace
 
     # -- 便捷方法 --------------------------------------------------------
     def auth_command(self, *args: str) -> list[str]:

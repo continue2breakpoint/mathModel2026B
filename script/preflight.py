@@ -199,6 +199,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if port_info["state"] == "open" else 1
 
     # 3) 登录
+    session_file = (
+        Path(args.session_file).expanduser() if args.session_file else paths.default_session
+    )
+    report["paths"]["session"] = str(session_file)
+    session_args = ["--session-file", str(session_file)]
+
     login_cmd = paths.auth_command("login")
     config_path = Path(args.config).expanduser() if args.config else paths.default_config
     if config_path.exists():
@@ -210,8 +216,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[preflight] FAIL {report['conclusion']}", file=sys.stderr)
         _write_report(report, log_dir, index_path)
         return 3
-    if args.session_file:
-        login_cmd += ["--session-file", args.session_file]
+    # 始终显式指定会话文件：默认路径可能落在不可写的位置（容器/受限沙箱），
+    # 否则会出现"登录其实已成功、却因为写会话失败而报错"这种最容易被误判的结局。
+    login_cmd += session_args
 
     login = run_cli(login_cmd, timeout=args.timeout)
     report["steps"]["login"] = login
@@ -232,9 +239,14 @@ def main(argv: list[str] | None = None) -> int:
         _write_report(report, log_dir, index_path)
         return 3
 
-    session_args = ["--session-file", args.session_file] if args.session_file else []
+    session_args = ["--session-file", str(session_file)]
     print(f"[preflight] login ok: team_no={login['parsed'].get('team_no')}")
     report["team_no"] = login["parsed"].get("team_no")
+    print(
+        f"[preflight] 剩余正式测试次数：problem3={login['parsed'].get('problem3_remaining_attempts')} "
+        f"problem4={login['parsed'].get('problem4_remaining_attempts')} "
+        f"待上传包={login['parsed'].get('pending_upload_count')}"
+    )
 
     # 4) presence / renew
     presence = run_cli(paths.auth_command("presence", *session_args), timeout=args.timeout)
@@ -247,7 +259,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[preflight] renew rc={renew['returncode']}")
 
     report["ok"] = True
-    report["conclusion"] = "线上链路打通：status / login / presence / renew 全部成功"
+    if port_info["state"] == "open":
+        report["conclusion"] = "线上链路打通：status / login / presence / renew 全部成功；robot 端口已开，可直接 --mode live"
+    else:
+        report["conclusion"] = (
+            "线上链路打通：status / login / presence / renew 全部成功；"
+            f"但 robot 端口 {args.robot_port} 未开（尚无进行中的练习/正式测试），"
+            "--mode live 需要先在模拟器里开始测试"
+        )
     print(f"[preflight] OK {report['conclusion']}")
     _write_report(report, log_dir, index_path)
     return 0

@@ -84,6 +84,27 @@ python3 script/preflight.py --no-login      # 只查平台状态 + robot 端口�
 退出码：`0` 全通；`1` robot 端口未开（没有进行中的测试，属正常）；`2` 平台返回业务码
 （如 `account_already_active`，说明链路与请求格式都对）；`3` 路径/网络错误。
 
+**会话文件**：预检会显式把 `--session-file` 指向仓库内的
+`login-jammers/linux-client/jm.session.json`（该文件名已被 login-jammers 的
+`.gitignore` 排除）。因为默认的 `~/.cache/jammers/session.json` 在容器/受限沙箱里
+常常不可写，会出现"登录其实已成功、却因为写会话失败而报错"这种最容易被误判的结局。
+
+实测输出：
+
+```text
+[preflight] status ok: new_tests_enabled=True deadline=2026-09-13T09:30:00.000Z
+[preflight] robot 127.0.0.1:2026 -> closed
+[preflight] login ok: team_no=<队号>
+[preflight] 剩余正式测试次数：problem3=3 problem4=3 待上传包=0
+[preflight] presence rc=0
+[preflight] renew rc=0
+[preflight] OK 线上链路打通：status / login / presence / renew 全部成功
+```
+
+> ⚠️ 登录成功会**占用该账号的设备会话**。如果之后要在自己的模拟器里登录，
+> 先 `python3 <login-jammers>/linux-client/python/jammers_auth.py logout
+> --session-file <...>/jm.session.json`，否则会撞上 `account_already_active`(409)。
+
 ### 4.2 单次运行
 
 ```bash
@@ -209,13 +230,31 @@ client = ReplayClient.from_jsonl("logs/runs/<run_id>/run.jsonl")
 PYTHONPATH=framework/src python3 -m mathmodel2026b.mock.server \
     --port 2026 --robot-id <队号> --seed 11
 
-# 终端 B：走 live 分支
+# 终端 B：先确认线上会话 + 端口都就绪，再走 live 分支
+python3 script/preflight.py
 python3 script/run.py --mode live --tag live-local
 ```
 
-实测：`cleared=13/13`，`average_clear_time_s=648.5`，事件流里记录的
-`measure_result` / `clear_result` / `accepted` / `virtual_time_s` / `exit_reason`
-都是真实线上格式，因此换成官方客户端监听同一端口即可无缝切到线上。
+实测（会话已登录 + 端口已开，即生产形状）：
+
+```text
+[preflight] robot 127.0.0.1:2026 -> open
+[preflight] OK 线上链路打通：... robot 端口已开，可直接 --mode live
+ok run=..._live-online_45c523 cleared=16/None avg_s=543.4 virtual_s=8694.8
+```
+
+事件流里记录的 `measure_result` / `clear_result` / `accepted` / `virtual_time_s` /
+`exit_reason` 都是真实线上格式，因此换成官方客户端监听同一端口即可无缝切到线上。
 
 注意：`--mode live` 时 `n_jammers` 为 `None`（robot API 拿不到总数，
 演练测试只在结束时由界面给出），所以线上只能记 `cleared_count` 与虚拟时间。
+
+### 6.2 正式测试前的建议流程
+
+1. `python3 script/preflight.py` —— 确认会话、剩余次数、robot 端口状态。
+2. 在模拟器里点"开始练习测试"，倒计时结束后端口才开。
+3. `python3 script/run.py --mode live --tag practice-N` —— 跑一次演练，日志落在
+   `logs/runs/<run_id>/`。
+4. `python3 script/report.py --tag practice-N` —— 看清除率与平均定位清除时间。
+5. 用 `ReplayClient` 重放这一场的 `run.jsonl`，确认本地逻辑与线上一致，
+   再去点"开始正式测试"（正式测试只有 3 次机会）。
