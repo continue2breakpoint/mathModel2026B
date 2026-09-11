@@ -69,10 +69,18 @@ pip install -e 'framework[dev]'
 | --- | --- |
 | `jammers_paths.py` | 解析 login-jammers 路径、解释器、账号配置、会话文件 |
 | `preflight.py` | 线上腿预检：`status` → `login` → `presence` → `renew`（经 login-jammers CLI） |
+| `probe_practice.py` | 线上**练习测试 authorize 探针**：拿到 `practice_ticket_b64` 并解出票据 claims |
+| `probe_practice_variants.py` | 请求体变体对照表，区分"请求字段不正确"与"请求内容不正确" |
+| `run_practice_online.py` | **线上演练全流程**：login → authorize → 本地跑（robot API 挂真实 2026 端口）→ 可选 statistics |
 | `run.py` | 跑 **一次** 问题3 策略（`--mode mock` 离线 / `--mode live` 连真实 robot 端口） |
 | `run_batch.py` | 参数网格 × 随机案例的批量调参，产出 `logs/results.jsonl` 与批次摘要 |
+| `q3_time_audit.py` | **虚拟时间审计**：按决策类别（扫描/逼近/清除）拆路程与时间占比 |
+| `q3_diagnose_scan.py` | **覆盖扫描质量诊断**：扫描结束后各频道可行域有多准 |
+| `q3_cover_design.py` | **覆盖扫描设计离线优化**（含"每停点扫 20 频道"的代价） |
 | `report.py` | 汇总 `results.jsonl`：表格 / 分组统计 / CSV / Markdown |
 | `smoke.sh` | 一键体检整条工作流 |
+
+> 线上演练的完整说明、逆向细节与"为什么不建议上报"见 [`../说明.md`](../说明.md)。
 
 ### 4.1 线上腿预检
 

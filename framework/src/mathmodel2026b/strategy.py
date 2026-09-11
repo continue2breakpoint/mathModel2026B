@@ -67,7 +67,7 @@ class Q3Params:
     localize_before_full_scan: bool = False
 
     # 逼近 / 精定位
-    approach_radii: tuple[float, ...] = (200.0, 400.0, 700.0)
+    approach_radii: tuple[float, ...] = (30.0, 60.0, 120.0, 250.0)
     approach_directions: int = 8
     min_angular_separation_deg: float = 25.0
     max_refine_rounds: int = 6
@@ -79,6 +79,19 @@ class Q3Params:
     # 牺牲角度分离，实测清除率会掉到 0.97 左右，不可接受。
     sep_weight: float = 2.0
     travel_weight: float = 1.0 / 1200.0
+    #: "靠近源"的权重：候选点到可行域的平均距离（米）的惩罚系数。
+    #: 原打分里**完全没有"离源多近"这一项**，而定位结束后仍要走完到源的距离，
+    #: 那一段是总路程的大头；加上这一项可以把"取读数"和"走过去"合成一个目标。
+    approach_weight: float = 1.0 / 500.0
+    #: 收尾阶段的处理顺序：
+    #: ``channel`` = 按频道号升序（原始行为，会在区域里来回横跳）；
+    #: ``nearest``  = 按"从当前位置最近的下一个源"贪心串成路线。
+    visit_order: str = "nearest"
+    #: 扫描阶段跳过"已经定位好"的频道：一个频道只对应一个源（附录1-1），
+    #: 一旦可行域最小包围圆 <= 清除容差，再测该频道不会有任何新信息，
+    #: 白白花掉 1s 切换 + 5s 检测。7 个扫描点 × 20 频道 = 140 次检测，
+    #: 是仅次于路程的第二大开销。
+    skip_localized_probes: bool = True
 
     # 预算保护
     max_virtual_time_s: float = 300_000.0
@@ -154,6 +167,9 @@ class Q3Strategy(Strategy):
             ch_state = state.channels[channel]
             if ch_state.is_cleared:
                 continue
+            if p.skip_localized_probes and self._is_localized(ch_state):
+                # 频道与源一一对应，已经能 20m 内清除的频道再测不会有新信息
+                continue
             if self._budget_exhausted(state):
                 return
             # 就地定位会把机器狗带离本扫描点，测下一个频道前必须回到 point
@@ -169,10 +185,21 @@ class Q3Strategy(Strategy):
 
     # -- 阶段2：收尾（把还差读数的频道补齐）------------------------------
     def _finish_pending(self, client: SimulatorClient, state: DogState) -> None:
-        for channel in sorted(state.uncleared_detected):
-            if self._budget_exhausted(state):
-                return
-            self._localize_and_clear(client, state, channel)
+        if self.params.visit_order == "nearest":
+            # 在线重排：每处理完一个源，就用"当前位置 + 最新估计点"重新挑最近的下一个。
+            # 估计点会随着读数增加而变准，因此比一开始排好序更稳。
+            remaining = set(state.uncleared_detected)
+            while remaining:
+                if self._budget_exhausted(state):
+                    return
+                channel = self._nearest_pending(state, remaining)
+                remaining.discard(channel)
+                self._localize_and_clear(client, state, channel)
+        else:
+            for channel in sorted(state.uncleared_detected):
+                if self._budget_exhausted(state):
+                    return
+                self._localize_and_clear(client, state, channel)
         # 兜底：只补扫"从未被探测过"的频道。
         # 注意不能把"没有读数的频道"都当成遗漏——20 个频道里必然有几个根本没有干扰源，
         # 对它们做全区域重扫纯属浪费（实测约 10km 路程）。
@@ -181,6 +208,21 @@ class Q3Strategy(Strategy):
         ]
         if unprobed and not self._budget_exhausted(state):
             self._rescan(client, state, unprobed)
+
+    def _nearest_pending(self, state: DogState, remaining: set[int]) -> int:
+        """在还没处理的频道里挑"估计位置离当前位置最近"的那个。
+
+        原实现按频道号升序，等于让机器狗在 1800m 的圆域里按频道号随机横跳；
+        而"访问所有源"本来就是一个 TSP，最近邻贪心就能拿掉大部分横跳路程。
+        """
+
+        def cost(channel: int) -> tuple[float, int]:
+            est = self._estimate(state.channels[channel])
+            if est is None:
+                return (inf, channel)
+            return (state.position.distance_to(est), channel)
+
+        return min(remaining, key=cost)
 
     def _rescan(
         self, client: SimulatorClient, state: DogState, channels: list[int]
@@ -257,6 +299,11 @@ class Q3Strategy(Strategy):
                 self._move(state, est)
                 self._clear(client, state, est, channel, reason="last-resort")
 
+    def _is_localized(self, ch_state: ChannelState) -> bool:
+        """该频道是否已经收敛到"瞄中心必定命中"的程度。"""
+        circle = self._clear_circle(ch_state)
+        return circle is not None
+
     def _clear_circle(
         self, ch_state: ChannelState, tolerance_m: float | None = None
     ) -> Circle | None:
@@ -299,6 +346,8 @@ class Q3Strategy(Strategy):
         est = self._estimate(ch_state)
         if est is None:
             return None
+        region = self._region(ch_state)
+        samples = self._region_samples(region, est)
         existing = [bearing for _, bearing in ch_state.readings]
         best: tuple[float, Point] | None = None
         for radius in p.approach_radii:
@@ -322,6 +371,9 @@ class Q3Strategy(Strategy):
                     p.sep_weight * min(sep, 90.0) / 90.0
                     - p.travel_weight * travel
                 )
+                if p.approach_weight > 0.0 and samples:
+                    mean_d = sum(cand.distance_to(s) for s in samples) / len(samples)
+                    score -= p.approach_weight * mean_d
                 if best is None or score > best[0]:
                     best = (score, cand)
         if best is None:
@@ -331,6 +383,28 @@ class Q3Strategy(Strategy):
         if state.position.distance_to(chosen) < 1.0:
             return None
         return chosen
+
+    @staticmethod
+    def _region_samples(region: list[Point], est: Point, n: int = 200) -> list[Point]:
+        """在可行域内均匀撒点：顶点 + 质心 + 在包围盒上按射线采样的内点。
+
+        用于估计"从候选点到源的平均距离"——源必然落在可行域内，
+        这个均值就是对"还要走多远"的无先验估计。
+        """
+        if not region:
+            return []
+        samples: list[Point] = list(region) + [est]
+        xs = [pt.x for pt in region]
+        ys = [pt.y for pt in region]
+        if max(xs) - min(xs) < 1e-9 and max(ys) - min(ys) < 1e-9:
+            return samples
+        step = max(1, len(region) // max(1, n // 2))
+        for index in range(0, len(region), step):
+            a = region[index]
+            b = region[(index + 1) % len(region)]
+            for t in (0.25, 0.5, 0.75):
+                samples.append(Point(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y)))
+        return samples
 
     def _fallback_point(self, state: DogState, ch_state: ChannelState) -> Point | None:
         """退路：回到最早检测到该频道的点附近再取一次读数。"""
@@ -444,8 +518,9 @@ class Q3Strategy(Strategy):
 
 
 #: 兼容旧名字（README / docs 里称 "baseline"）。
-#: 当前默认参数（六边形 1200m + 全频道扫描 + 全扫后逐个交会定位）在 mock 上
-#: 随机案例里清除率 1.000，平均定位清除时间约 560s（虚拟时间约 7200s）。
+#: 当前默认参数（六边形 1200m + 全频道扫描 + 在线最近邻序 + 逼近半径 30/60/120/250）
+#: 在 mock 上随机案例里清除率 1.000，平均定位清除时间约 350s（虚拟时间约 4430s）。
+#: 200 seed 验证：未全清除 0/200。
 class Q3BaselineStrategy(Q3Strategy):
     def __init__(self, ring_radius: float = 1200.0) -> None:
         params = Q3Params()
