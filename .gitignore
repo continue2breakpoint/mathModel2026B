@@ -14,3 +14,19 @@ venv/
 # 编辑器/系统
 .DS_Store
 *.swp
+
+# 备份/临时文件
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+*~
+
+# C/C++/Python 扩展构建产物
+*.so
+*.pyd
+*.o
+*.a
+*.dylib
+build/
