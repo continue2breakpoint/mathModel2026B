@@ -54,6 +54,9 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "cpp"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import q2_zones as zones  # noqa: E402
 
 try:
     import geom_cpp  # type: ignore
@@ -190,17 +193,23 @@ def covering_lower_bound(area: float, diameter: float, r_min: float) -> int:
 
 
 def guaranteed_detection_region(a: float, b: float, r_min: float = RHO_MIN) -> bool:
-    """Whether S2=(a,b) guarantees d2<=rho_min for every possible G.
+    """Whether S2=(a,b) guarantees a successful second reading.
 
-    The possible G-set is the 1500 m long 2-degree sector.  Its extreme
-    points are the apex (0,0), (1500 cos eps, 1500 sin eps), and
-    (1500 cos eps, -1500 sin eps).  Intersecting the three disks of radius
-    r_min around these points gives the guarantee set.
+    Corrected form (see docs/q2_second_point_strategy.md §5.1 and
+    script/q2_rho_validation.py): because the P1 hit at range d1 implies
+    rho >= max(RHO_MIN, d1), the guarantee set is the intersection of the
+    three radius-r_min disks centred at S1 and at S1 + r_min*e(theta1 +- 1deg),
+    *not* at the 1500 m far corners.  Using the far corners is sufficient but
+    strictly smaller (at x = 500 m it gives |y| <= 0 instead of 848.7 m).
+
+    A single r_min argument (rho_min = rho_max = r_min) reproduces this
+    local-coordinate version; the dashboard uses the exact polygon form which
+    also handles the target-disk clip.
     """
     c = math.cos(HALF_WIDTH_RAD)
     s = math.sin(HALF_WIDTH_RAD)
-    g_plus = (RHO_MAX * c, RHO_MAX * s)
-    g_minus = (RHO_MAX * c, -RHO_MAX * s)
+    g_plus = (r_min * c, r_min * s)
+    g_minus = (r_min * c, -r_min * s)
     tests = [
         a * a + b * b,
         (a - g_plus[0]) ** 2 + (b - g_plus[1]) ** 2,
@@ -328,23 +337,34 @@ def main() -> int:
     parser.add_argument("--ndelta", type=int, default=7)
     parser.add_argument("--bound-sides", type=int, default=192)
     parser.add_argument("--grid", type=int, default=0, help="run a coarse search on an N x N local grid")
+    parser.add_argument("--grid-x", type=str, default="200,1200",
+                        help="local x range (along theta1) for --grid")
+    parser.add_argument("--grid-y", type=str, default="25,900",
+                        help="local |y| range for --grid; both signs are searched")
+    parser.add_argument("--no-certain-filter", action="store_true",
+                        help="do not restrict the grid to the guarantee region")
     parser.add_argument("--top", type=int, default=12)
     args = parser.parse_args()
 
     grid = make_grid(args.nr_low, args.nr_high, args.nphi, args.ndelta)
+    zone_model = zones.ZoneModel((0.0, 0.0), 0.0, rho_min=RHO_MIN, rho_max=RHO_MAX)
 
     points: list[tuple[float, float]] = []
     if args.points:
         points.extend(parse_points(args.points))
 
     if args.grid > 0:
-        # A reasonable local search box.  The lower side can be mirrored.
-        xs = np.linspace(500.0, 1000.0, args.grid)
-        ys = np.linspace(1.0, 700.0, args.grid)
-        for x in xs:
-            for y in ys:
-                if guaranteed_detection_region(float(x), float(y)) and angle_condition(float(x), float(y)):
-                    points.append((float(x), float(y)))
+        x0, x1 = (float(t) for t in args.grid_x.split(","))
+        y0, y1 = (float(t) for t in args.grid_y.split(","))
+        for x in np.linspace(x0, x1, args.grid):
+            for y in np.linspace(y0, y1, args.grid):
+                for sign in (1.0, -1.0):
+                    a, b = float(x), sign * float(y)
+                    if not args.no_certain_filter:
+                        if float(zone_model.certain_margin((a, b))[0]) > 0.0:
+                            continue
+                    if angle_condition(a, b):
+                        points.append((a, b))
 
     if not points:
         points = [
