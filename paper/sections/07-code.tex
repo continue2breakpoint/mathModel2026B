@@ -8,12 +8,22 @@
 \texttt{cpp/geom.hpp}\newline\texttt{bindings.cpp}&C++几何内核及Python接口，用于直径、最小包围圆与求积加速。\\
 \texttt{q2\_second\_point\_quadrature.py}&第二检测点参考先验的数值求积；需补齐近距分支、一般第一点及任意候选的第二接收圆约束。\\
 \texttt{q2\_zones.py}&第二检测点区域构造与接收概率计算，使用时区分外包络近似和严格区域。\\
-\texttt{strategy.py}&问题三基础扫描、目标调度、局部补测和清除；需接入本文有限兜底和修正夹角评价。\\
-\texttt{coverage.py}\newline\texttt{strategy\_matrix.py}&联合状态、覆盖及调度扩展；仅作为第三问改进的实现参考，其第四问代码不构成本文第四问解法。\\
+\texttt{strategy.py}&q3 对照基线：固定布局扫描及逐源补测。\\
+\texttt{knowledge.py}&本文核心数据结构：频道—路径稀疏矩阵、列元数据、单元格证据、统计缓存与导出。\\
+\texttt{coverage.py}&从矩阵生成 Belief，维护安全半径界、整格位掩码、缺口报告与集合覆盖选点。\\
+\texttt{strategy\_matrix.py}&第三问主策略：矩阵写入、选择性检测、成批精化、自适应逼近与缺口补测；第四问代码不作为本文该问解法。\\
 \texttt{verify\_formulas.py}&本次新增的离线公式复核程序；检验覆盖极值、候选点裕量、后验均值和兜底单元尺度。\\
 \bottomrule
 \end{longtable}
 现有源码中的注释不能代替证明，例如“凸区域半径等于直径一半”“确定性求积即精确积分”“最近邻加2-opt所得路径为下界”等表述均不采用。
+
+\subsection{知识矩阵核心字段}
+以下直接摘录所设计数据结构对应的 \texttt{knowledge.py} 字段。\texttt{cells} 按频道和路径格组织稀疏证据，\texttt{columns} 单独维护访问位置，\texttt{point} 保存真实检测坐标，\texttt{\_stats} 为查询缓存。方法与依赖省略，完整文件见源码快照。当前字段保存格内最新摘要，论文提出的真实位置子表与追加事件索引为后续改进。
+\lstinputlisting[language=Python]{code/excerpt_knowledge.py}
+
+\subsection{覆盖状态及位运算核心代码}
+\texttt{region\_mask} 表示候选格，\texttt{covered\_mask} 表示已确认格，差集与计数直接用于缺口决策。这里的 \texttt{complete} 仅对应发现层，任务完成还需检查各已发现频道均已清除。
+\lstinputlisting[language=Python]{code/excerpt_masks.py}
 
 \subsection{半平面裁剪与直径计算核心摘录}
 下列内容从 \texttt{geometry.py} 提取，省去注释与类型声明以缩短篇幅；完整文件见支撑材料。示向角在现有接口中为度，进入三角函数前统一转弧度。

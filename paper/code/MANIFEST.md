@@ -12,3 +12,4 @@
 | `cpp/bindings.cpp` | `ccf17dc21a68a53e62fc131b4d2ec8abbdfa4d86ead013860f4b888b007adb29` |
 | `script/q2_second_point_quadrature.py` | `365193c0ba40afaf14307fcb05e5340d38cfe7077b30b35843cf71418810c5ef` |
 | `script/q2_zones.py` | `afce59480a9a90dcc17aa204ffcae9a043a974093223c09ccf7a9f5338f96d76` |
+| `framework/src/mathmodel2026b/knowledge.py` | `e4904542bb4a0499cdb002f644764d5f095371bb75996b8d1410736af61b7621` |

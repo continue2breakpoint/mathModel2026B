@@ -30,7 +30,7 @@
 \lstset{basicstyle=\ttfamily\scriptsize,breaklines=true,columns=fullflexible,keepspaces=true,showstringspaces=false,frame=single,numbers=left,numberstyle=\tiny,numbersep=5pt}
 \begin{document}
 \begin{center}
-{\LARGE\bfseries 基于有界误差集合估计的\\[0.25em]无线电干扰源定位与清除}\par
+{\LARGE\bfseries 基于知识矩阵与集合估计的\\[0.25em]无线电干扰源自适应定位与清除}\par
 \vspace{1em}{\large\bfseries 摘要}
 \end{center}
 针对未知数量无线电干扰源的自动定位与清除问题，建立“区域覆盖发现—交会集合估计—近距补测—认证清除”的模型。示向误差仅有区间界，故以包含真实位置的可行域作为状态，避免把同地点重复读数视为独立样本。
@@ -39,9 +39,9 @@
 
 对问题二，利用同一干扰源有效接收半径固定的性质，构造保证再次接收到信号的候选区域，并加入交会角约束。在第一检测点位于圆心、附加均匀先验的参考情形下，给出沿示向线前进约 $850\,\mathrm m$、横移约 $520\,\mathrm m$ 的候选点；一般位置需根据目标圆域重新裁剪和评价。概率仅用于候选点排序，确定性结论不依赖该先验。
 
-对问题三，圆心与半径 $1200\,\mathrm m$ 的正六边形顶点形成七点覆盖，最坏覆盖距离约为 $968.90\,\mathrm m$。在覆盖发现后，按当前位置选择待清除目标，以多次测向缩小区域，达到清除判据后执行光学定位。补充逐频道覆盖证书与有限网格清除兜底，使“未遗漏”与“已清除”具有明确的数学条件。仓库已有的30例本地模拟记录中，基础策略均完成全部清除，单案例每源时间的中位数约为 $332.19\,\mathrm s$；该记录不代表官方测试成绩。第四问解法与正式测试结果预留。
+对问题三，设计以频道为行、路径位置为列、结构化反馈为单元格的稀疏知识矩阵。该结构按行汇集目标证据，按列组织共享停点检测，将正观测、无信号、近距及清除结果统一用于后续决策。由矩阵生成逐频道可行域与接收半径界，再以位掩码维护覆盖缺口，形成选择性扫描、成批精化、分段逼近及缺口补测的闭环。与 q3 基线相比，matrix 的改进集中于负证据利用、多个目标共享移动和减少重复确认。本文以 matrix 为主方案，真实线上演练的提升幅度与阶段归因在实验部分预留；历史本地模拟作为独立补充。第四问解法与正式测试结果预留。
 
-\noindent\textbf{关键词：}有界误差；交会定位；最小包围圆；稳健选点；覆盖搜索
+\noindent\textbf{关键词：}知识矩阵；集合估计；位掩码覆盖；批量补测；自适应决策
 \clearpage
 \input{sections/01-foundation}
 \input{sections/02-q1}
@@ -54,5 +54,6 @@
 \end{thebibliography}
 \clearpage\appendix
 \input{sections/06-derivations}
+\input{sections/08-local-records}
 \input{sections/07-code}
 \end{document}

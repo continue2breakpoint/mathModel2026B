@@ -62,7 +62,25 @@ def main():
     # Construct a triangle and confirm diameter disk fails.
     triangle = [(0.,0.), (1.,0.), (.5, math.sqrt(3)/2)]
     assert math.dist(triangle[2], (.5,0.)) > .5
-    report = dict(coverage=checks, posterior_mean=mu,
+    # Matrix: a safe radius lower bound is not an impossibility threshold.
+    region = [(1100., -20.), (1200., -20.), (1200., 20.), (1100., 20.)]
+    source, rho, positive, negative = (1150., 0.), 1200., (0., 0.), (2500., 0.)
+    lower = 1100.  # Exact minimum distance from positive to rectangle.
+    upper = min(1500., max(math.dist(negative, x) for x in region))
+    assert lower <= rho <= upper
+    assert math.dist(source, positive) <= rho < math.dist(source, negative)
+    assert lower > lower - 50  # Outside plan radius still allows reception.
+    optical_source = (30., 0.)
+    assert 20 < math.dist(optical_source, positive) < 1000
+    region_mask, covered_mask = 0b111101, 0b001101
+    missing = region_mask & ~covered_mask
+    assert missing == 0b110000 and missing.bit_count() == 2
+    matrix_checks = dict(radius_lower=lower, radius_upper=upper,
+                         actual_radius=rho, plan_radius=lower-50,
+                         mask_uncovered_count=missing.bit_count(),
+                         optical_failure_distance=30.,
+                         matrix_open_route_m=1010+14*1010*math.sin(math.pi/8))
+    report = dict(matrix=matrix_checks, coverage=checks, posterior_mean=mu,
                   posterior_mean_direction=mu_direction,
                   candidate_margin=margin, candidate_sampled_worst_gap=worst,
                   outer_polygon_error=1800*(1/math.cos(math.pi/96)-1),

@@ -98,7 +98,7 @@ g(t)^2=t^2+r_h^2-2tr_h\cos\beta.
 \sqrt{R_0^2+r_h^2-2R_0r_h\cos(\pi/n)}\right\}.}
 \label{eq:generalcover}
 \end{equation}
-该式适用于上述 $n\ge3,\ 0<r_h\le R_0$ 条件，内部项不是 $r_h\sin(\pi/n)$。六边形代入即得式\eqref{eq:coverhex}。
+该式适用于上述 $n\ge3,\ 0<r_h\le R_0$ 条件，内部项不是 $r_h\sin(\pi/n)$。取六边形、环半径1200米，即得基线覆盖半径968.90米；取八边形、环半径1010米，即得 matrix 布局的949.14米。
 
 若要求 $c_n(r_h)\le a$，必须满足
 \begin{equation}
@@ -124,3 +124,36 @@ r_{h,\min}=900\sqrt3-100\sqrt{19}\approx1122.96\,\mathrm m.
 \min\left(b,\min_k d_k^+(B)\right),
 \end{equation}
 则整格不存在可行半径，可安全删除；反向不成立，未被删去的格仍可能不可行，应细分而不是直接认定有源。
+
+\subsection{知识矩阵的证据更新与单调性}
+设真实位置与半径为 $(G_j,\rho_j)$。对时刻 $t$ 的反馈 $y_t$，按状态表生成约束集 $\mathcal H(y_t,p_t)$，联合知识更新为
+\begin{equation}
+\mathcal F_j^{t+1}=\mathcal F_j^t\cap\mathcal H(y_t,p_t).
+\end{equation}
+若反馈符合题设且 $\mathcal F_j^0$ 包含真值，每个新约束也包含真值，故归纳可知真值始终不被删除。与此同时 $\mathcal F_j^{t+1}\subseteq\mathcal F_j^t$，新信息不会扩大真实可行集。
+
+这一性质要求保留全部有效历史。若一个格的最新证据覆盖掉另一真实位置的旧证据，重建集合可能重新扩大；若把光学失败错误转为无信号，甚至可能删除真值。因此紧凑矩阵应作为历史事件的索引和摘要，完整几何证据宜保留为追加记录。整行标记已清除是任务状态更新，不应抹掉用于复盘的历史内容。
+
+\subsection{半径界的安全性与空域检查}
+对任意正观测 $p$，因 $G_j\in\widehat K_j$，有
+\begin{equation}
+\min_{X\in\widehat K_j}\norm{p-X}\le\norm{p-G_j}\le\rho_j.
+\end{equation}
+对任意无线电负观测 $q$，有
+\begin{equation}
+\rho_j<\norm{q-G_j}\le\max_{X\in\widehat K_j}\norm{q-X}.
+\end{equation}
+分别对观测取最大下界和最小上界，即得式\eqref{eq:radiusbounds}。若算出 $L_j>U_j$，应检查证据、坐标、事件类别及数值误差，不能通过强行截断掩盖矛盾。
+
+例如真实源在 $(30,0)$、接收半径1000米，在原点光学清除失败，但无线电仍可接收。光学失败只排除20米圆，若将它解释为1000米圆内无信号，会直接删去真实源。矩阵统一记录多类反馈，并不意味着各类反馈共享同一种距离约束。
+
+\subsection{位掩码缺口与有限贪心补测}
+对每个频道与每个格组成的任务对 $(j,\ell)$，定义待确认有限全集
+\begin{equation}
+\mathcal E=\{(j,\ell):\ell\in\mathcal U_j\}.
+\end{equation}
+候选停点 $S$ 可服务其中整格满足接收保证的任务对，记为 $\mathcal E(S)$。若候选集有限，且已经验证 $\mathcal E\subseteq\bigcup_S\mathcal E(S)$，每次选择新增任务数为正的点并实际完成对应频道测量，则未确认任务数至少减少1。因此至多 $|\mathcal E|$ 步，或至多遍历整个有效候选集合，就能消除当前发现缺口。
+
+这是有限性结论，不是最短路径或最少停点定理；动态候选集和有限预算下仍应检查实际剩余缺口。若仅使用格心构造三角网格，则需额外验证整格条件，不能直接套用连续覆盖半径的结论。
+
+在每次真实动作完成后，先更新矩阵，再更新候选格和覆盖格；只登记真正返回反馈的频道。由于预算中断而未执行的后续频道，不能提前加入已确认集合。这样位掩码的零缺口才具有发现层证书意义。
