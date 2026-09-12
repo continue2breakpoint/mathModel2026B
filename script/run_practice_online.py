@@ -47,7 +47,7 @@ sys.path.insert(0, str(REPO_ROOT / "framework" / "src"))
 from jammers_paths import resolve  # noqa: E402
 from mathmodel2026b.mock.server import MockSimulator  # noqa: E402
 from mathmodel2026b.runner import RunConfig, run_once  # noqa: E402
-from mathmodel2026b.strategy import Q3Params  # noqa: E402
+from run import build_strategy_params, make_strategy_factory  # noqa: E402
 
 SCENARIO_SCHEMA_VERSION = "scenario-v1"
 RULESET_VERSION = "rules-v1"
@@ -88,6 +88,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seed", type=int, default=11, help="本地案例种子")
     ap.add_argument("--n-jammers", type=int, default=None)
     ap.add_argument("--directional", action="store_true", help="问题4：含定向源")
+    ap.add_argument(
+        "--strategy",
+        choices=["q3", "matrix"],
+        default="q3",
+        help="q3=旧 Q3Strategy；matrix=知识矩阵 KnowledgeSearchStrategy",
+    )
+    ap.add_argument("--keep-session", action="store_true",
+                    help="演练结束后不调用 logout（默认会退出设备会话）")
     ap.add_argument("--robot-port", type=int, default=DEFAULT_ROBOT_PORT)
     ap.add_argument("--submit", action="store_true", help="上报 statistics（默认只本地跑）")
     ap.add_argument("--case-code", default=None, help="覆盖上报用的 case_code")
@@ -165,18 +173,9 @@ def main(argv: list[str] | None = None) -> int:
           f"start_before={ticket['claims']['start_before']}")
 
     # --- 2) 本地跑（robot API 挂在真实端口上，策略走 live 路径） ----------
-    params = Q3Params()
-    for item in args.param:
-        key, raw = item.split("=", 1)
-        cur = getattr(params, key)
-        if isinstance(cur, tuple):
-            value: object = (float(raw),)
-        else:
-            try:
-                value = int(raw)
-            except ValueError:
-                value = float(raw)
-        setattr(params, key, value)
+    params = build_strategy_params(args.strategy, args.directional, args.param)
+    strategy_factory = make_strategy_factory(args.strategy, args.directional)
+    print(f"[online] strategy={args.strategy}")
 
     sim = MockSimulator(
         robot_id=team_no,
@@ -197,7 +196,12 @@ def main(argv: list[str] | None = None) -> int:
                 params=params,
                 tag="online-practice",
                 write_trace=False,
-                notes={"practice_ticket_nonce": ticket["claims"]["authorization_nonce_b64"]},
+                notes={
+                    "practice_ticket_nonce": ticket["claims"]["authorization_nonce_b64"],
+                    "strategy": args.strategy,
+                    "directional": args.directional,
+                },
+                strategy_factory=strategy_factory,
             )
         )
     finally:
@@ -254,6 +258,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[online] statistics accepted -> {json.dumps(stat_resp, ensure_ascii=False)}")
     else:
         print("[online] 未上报（加 --submit 才会调用 statistics）")
+
+    if not args.keep_session:
+        try:
+            client.logout()
+            report["logout"] = "ok"
+            print("[online] logout ok")
+        except Exception as exc:  # noqa: BLE001 - 清理失败不应覆盖演练结论
+            report["logout"] = f"{type(exc).__name__}: {exc}"
+            print(f"[online] logout failed: {type(exc).__name__}: {exc}")
 
     report["finished_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     out = Path(args.report) if args.report else (

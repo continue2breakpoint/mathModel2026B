@@ -24,6 +24,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
@@ -35,6 +36,8 @@ from jammers_paths import PathResolutionError, resolve  # noqa: E402
 from mathmodel2026b.logging_utils import default_log_root  # noqa: E402
 from mathmodel2026b.runner import RunConfig, run_once  # noqa: E402
 from mathmodel2026b.strategy import Q3Params  # noqa: E402
+
+STRATEGY_CHOICES = ("q3", "matrix")
 
 #: 离线 mock 用的占位队号。**不要在这里写死真实队号**——平台公告明确要求
 #: 提交代码时隐去队号，改为命令行参数/配置文件提供。
@@ -64,8 +67,13 @@ def coerce(value: str):
     return value
 
 
-def apply_param_overrides(params: Q3Params, overrides: list[str]) -> Q3Params:
-    valid = set(Q3Params.__slots__)
+def apply_param_overrides(params: Any, overrides: list[str]) -> Any:
+    """把 ``--param KEY=VALUE`` 应用到任意 slotted dataclass 参数对象上。"""
+    valid = set(getattr(params, "__slots__", ()) or ())
+    if not valid:
+        from dataclasses import fields
+
+        valid = {field.name for field in fields(params)}
     for item in overrides:
         if "=" not in item:
             raise SystemExit(f"--param 需要 KEY=VALUE 形式：{item!r}")
@@ -84,9 +92,38 @@ def apply_param_overrides(params: Q3Params, overrides: list[str]) -> Q3Params:
     return params
 
 
+def build_strategy_params(strategy: str, directional: bool, overrides: list[str]) -> Any:
+    """构造策略参数对象（``q3`` 或 ``matrix``）。"""
+    if strategy == "matrix":
+        from mathmodel2026b.strategy_matrix import MatrixParams
+
+        params: Any = MatrixParams(directional=directional)
+    else:
+        params = Q3Params()
+    return apply_param_overrides(params, overrides)
+
+
+def make_strategy_factory(strategy: str, directional: bool):
+    """返回 ``RunConfig.strategy_factory`` 需要的可调用对象。"""
+    if strategy == "matrix":
+        from mathmodel2026b.strategy_matrix import KnowledgeSearchStrategy, Q4Strategy
+
+        cls = Q4Strategy if directional else KnowledgeSearchStrategy
+        return cls
+    from mathmodel2026b.strategy import Q3Strategy
+
+    return Q3Strategy
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="运行一次问题3 策略并记录日志")
+    parser = argparse.ArgumentParser(description="运行一次问题3/4 策略并记录日志")
     parser.add_argument("--mode", choices=["mock", "live"], default="mock")
+    parser.add_argument(
+        "--strategy",
+        choices=STRATEGY_CHOICES,
+        default="q3",
+        help="q3=旧 Q3Strategy（兼容默认）；matrix=知识矩阵 KnowledgeSearchStrategy",
+    )
     parser.add_argument("--robot-id", default=None, help="默认取 login-jammers 配置里的队号")
     parser.add_argument("--login-jammers", default=None, help="login-jammers 仓库根目录")
     parser.add_argument("--base-url", default=None, help=f"robot 端口，默认 {DEFAULT_ROBOT_URL}")
@@ -115,7 +152,8 @@ def resolve_robot_id(explicit: str | None, login_jammers: str | None) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    params = apply_param_overrides(Q3Params(), args.param)
+    params = build_strategy_params(args.strategy, args.directional, args.param)
+    strategy_factory = make_strategy_factory(args.strategy, args.directional)
     robot_id = resolve_robot_id(args.robot_id, args.login_jammers)
     if args.mode == "live" and robot_id == PLACEHOLDER_TEAM_NO:
         print(
@@ -139,6 +177,8 @@ def main(argv: list[str] | None = None) -> int:
         tag=args.tag,
         write_trace=not args.no_trace,
         verbose=args.verbose,
+        notes={"strategy": args.strategy, "directional": args.directional},
+        strategy_factory=strategy_factory,
     )
     outcome = run_once(config)
     metrics = outcome.metrics

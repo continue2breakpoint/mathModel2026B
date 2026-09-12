@@ -287,6 +287,35 @@ d(s, P_c) ≤ R̂_c − margin          （已收到信号的频道：停点还�
 | `lateral` | 134 m | 2465 m | 横向补测（绝大多数出现在定向场景） |
 | `sweep` / `last-resort` | ~0 | ~880 m | 收尾与兜底 |
 
+### 线上接口演练 vs 本地 mock（seed 11，2026-09-12）
+
+> **限定**：当前环境没有官方 `jammers-simulator.exe`，因此
+> `run_practice_online.py` 在通过平台 `authorize` 后，把 robot API 挂在自己的
+> `framework/src/mathmodel2026b/mock/world.py` 上。它验证的是
+> **登录 / 票据 / robot-protocol-v1 / live 代码路径**，不是官方 simcore 的物理。
+> 因此这里只能说明"接口演练结果与 mock 不矛盾"，不能替代正式测试。
+
+命令（默认不上报 statistics，演练结束自动 logout）：
+
+```bash
+python3 script/run_practice_online.py --strategy q3     --seed 11 --report logs/online_q3_seed11.json
+python3 script/run_practice_online.py --strategy matrix --seed 11 --report logs/online_matrix_seed11.json
+```
+
+| 指标（seed 11，13 个源全清） | `Q3Strategy`（main，mock / live 路径） | `KnowledgeSearchStrategy`（mock / live 路径） |
+| --- | --- | --- |
+| 清除数 | 13/13 / 13/13 | 13/13 / 13/13 |
+| 虚拟总时间 | 4286.1 s / 4286.1 s | 4103.0 s / 4103.0 s |
+| 平均定位清除时间 | 329.70 s / 329.70 s | 315.61 s / 315.61 s |
+| 检测次数 | 144 / 144 | 130 / 130 |
+| 程序墙钟 | 0.46 s / 0.46 s | 1.41 s / 1.54 s |
+
+结论：矩阵策略的 **live 代码路径与本地 mock 逐项一致**（同一份 `KnowledgeSearchStrategy` +
+同一 seed 的案例），seed 11 上相对 main 的旧策略在虚拟时间、平均定位清除时间和检测次数
+上均更优；30 seed 的总体中位数见 §7（旧策略在总路程/总时间上仍略好，矩阵策略的优势是
+完备性证书、负例利用和检测次数）。因此满足"线上演练符合 mock → 可合并"的判据；
+正式测试前仍需在官方模拟器上复测。
+
 ## 7.5 决策逻辑的算法定性（"贪心？n-opt？贝叶斯？"）
 
 把每条决策线拉出来看，**核心是"贪心 + 证书"，不含任何贝叶斯推断，也不做多步寻优**：
