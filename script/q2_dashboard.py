@@ -475,6 +475,14 @@ def api_heatmap() -> Response:
         {"rho": p["rho"], "label": p["label"], "poly": p["poly"].tolist()}
         for p in source_polys if p["poly"].size
     ]
+    # Bounding box of the possible source set: the UI uses it to zoom the map
+    # onto A1 (same field name as the knowledge-matrix endpoint).
+    if source_polys:
+        vertices = np.asarray([v for p in source_polys for v in p["poly"]], dtype=float)
+        source_bounds = [float(vertices[:, 0].min()), float(vertices[:, 0].max()),
+                         float(vertices[:, 1].min()), float(vertices[:, 1].max())]
+    else:
+        source_bounds = [s1[0], s1[1], s1[0], s1[1]]
     recommended = [_local_to_world(s1, theta1, loc) for loc in RECOMMENDED_LOCAL]
 
     def _clean(arr: np.ndarray) -> list:
@@ -523,6 +531,7 @@ def api_heatmap() -> Response:
         "in_target": in_target.tolist(),
         "certain_poly": certain_poly.tolist() if certain_poly.size else [],
         "source_polys": source_polys,
+        "source_bounds": source_bounds,
         "recommended": [list(p) for p in recommended],
         "metric": metric,
         "stat": stat,

@@ -282,6 +282,20 @@ async function drawAndSettle(browser, label, timeoutMs) {
     const restored = await browser.eval('return ' + TRACE_NAMES + '.some(n=>String(n).startsWith("场地圆"));');
     if (restored) ok('辅助线开关：重新打开后图元恢复'); else fail('辅助线开关不能恢复');
 
+    /* 放大到可能区域（依赖响应里的 source_bounds） */
+    const spanBefore = await browser.eval('return Q2.ws.doublet.state.uMax - Q2.ws.doublet.state.uMin;');
+    await browser.eval(
+      'const b=[...document.querySelectorAll("#drawerBody button")].find(x=>x.textContent.indexOf("放大到可能区域")>=0);' +
+      'if(b) b.click(); return !!b;');
+    await browser.waitFor('(Q2.ws.doublet.state.uMax - Q2.ws.doublet.state.uMin) < ' + spanBefore,
+      '放大到可能区域', 20000);
+    const spanAfter = await browser.eval('return Q2.ws.doublet.state.uMax - Q2.ws.doublet.state.uMin;');
+    if (spanAfter < spanBefore) ok('双点：放大到可能区域把绘图范围从 ' + Math.round(spanBefore) + ' m 收到 ' + Math.round(spanAfter) + ' m');
+    else fail('双点放大按钮无效：' + spanBefore + ' -> ' + spanAfter);
+    await drawAndSettle(browser, '放大后重算');
+    await browser.eval('const b=[...document.querySelectorAll("#drawerBody button")].find(x=>x.textContent.indexOf("全场范围")>=0); if(b) b.click(); return true;');
+    await drawAndSettle(browser, '回到全场');
+
     /* ---------------------------------------------------- 4. 探针 */
     await browser.eval('const gd=document.getElementById("plot");' +
       'gd.emit("plotly_click",{points:[{x:850,y:520}]}); return true;');

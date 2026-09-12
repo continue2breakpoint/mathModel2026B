@@ -197,3 +197,51 @@ class MatrixTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class UiContractTests(unittest.TestCase):
+    """前端契约：q2_assets/*.js 读取的字段必须真的出现在响应里。
+
+    统一界面把绘制逻辑集中到了共用层，后端字段一旦改名，页面会静默画空图，
+    所以这里把两个工作区用到的键逐条钉住。
+    """
+
+    def test_doublet_endpoints_contract(self):
+        client = app.test_client()
+        base = dict(s1x=0, s1y=0, theta1=0, u_min=-1800, u_max=1800, v_min=-1800, v_max=1800,
+                    nx=9, ny=9, metric='Rmin', stat='mean',
+                    rho_model='uniform', rho_min=1000, rho_max=1500)
+        d = client.post('/api/heatmap', json=base).json
+        for key in ('u', 'v', 'z', 'pdet', 'zone', 'certain_poly', 'gap', 'counts', 'areas_km2',
+                    'source_polys', 'source_bounds', 'recommended', 'best', 'elapsed_s',
+                    'metric', 'stat', 's1', 'theta1', 'rho'):
+            self.assertIn(key, d, key)
+        self.assertEqual([p['label'] for p in d['source_polys']],
+                         ['ρ_min=1000 m', 'ρ_max=1500 m'])
+        self.assertTrue(all(set(p) == {'rho', 'label', 'poly'} for p in d['source_polys']))
+        for stat in ('counts', 'areas_km2'):
+            self.assertEqual(set(d[stat]), {'certain', 'probabilistic', 'blind'} | (
+                {'computed', 'skipped'} if stat == 'counts' else set()))
+        pr = client.post('/api/probe', json={**base, 's2x': 850, 's2y': 520}).json
+        for key in ('s2', 'zone', 'margin', 'gap', 'p_det', 'p_det_quad', 'value', 'var',
+                    'dist_s1', 'local_along', 'local_lateral', 'sweep', 'rho', 'metric'):
+            self.assertIn(key, pr, key)
+        self.assertEqual(set(pr['sweep'][0]), {'rho', 'p_det', 'margin', 'gap', 'zone', 'value'})
+
+    def test_matrix_endpoints_contract(self):
+        client = app.test_client()
+        payload = dict(matrix=matrix(find([0,0],0)), resolution=5, bounds=[-1800,1800,-1800,1800])
+        d = client.post('/api/matrix/heatmap', json=payload).json
+        for key in ('x', 'y', 'z', 'pdet', 'zone', 'baseline', 'source_polys', 'source_bounds',
+                    'observations', 'target_radius', 'nodes', 'elapsed_s', 'metric', 'stat',
+                    'condition', 'matrix'):
+            self.assertIn(key, d, key)
+        self.assertEqual(set(d['baseline']), {'Rmin', 'N20', 'area'})
+        self.assertEqual(d['matrix']['schema'], 'q2-channel/v1')
+        obs = d['observations'][0]
+        self.assertEqual(set(obs), {'point', 'status', 'bearing_deg', 'poly', 'near_radius', 'rays'})
+        pr = client.post('/api/matrix/probe', json={**payload, 'point': [850, 520]}).json
+        for key in ('pdet', 'mean', 'variance', 'repeated', 'zone', 'distances', 'metric',
+                    'condition', 'mean_other', 'variance_other', 'condition_other', 'baseline', 'nodes'):
+            self.assertIn(key, pr, key)
+        self.assertEqual(set(pr['distances'][0]), {'point', 'status', 'distance'})
