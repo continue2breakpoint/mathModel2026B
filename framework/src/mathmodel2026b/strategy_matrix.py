@@ -26,12 +26,17 @@ r"""矩阵驱动的搜索策略：知识矩阵 + 覆盖证书 + 解析式逼近�
 1. 一次示向度读数给出以检测点为中心的 ±1° 锥；多个锥求交 + "距离 ≤ R_max" 的圆约束，
    得到必定含真值的凸可行域 :math:`P_c`（沿用 ``geometry.feasible_region``）。
 2. 可行域最小包围圆半径 ≤ 20m ⇒ 瞄准圆心 ``/clear`` **必定命中**（光学作用距离）。
-3. 负例 ``not_find`` 在 p 意味着 :math:`R < |p-源|`；由于源 ∈ :math:`P_c`，
-   取 :math:`\R_hat=\min_p d(p,P_c)` 作为 R 的在线上界估计（见 ``coverage.estimate_radius``）。
-   :math:`\R_hat` 越大，"覆盖整个区域"需要的停点越少，这就是负例的收益来源。
+3. 负例 ``not_find`` 在 q 意味着 ``R < |q - 源|``；对 ``x ∈ P_c`` 取**最大**距离
+   得到 R 的安全**上界**，正例距离取**最小**见证得到安全**下界**
+   （见 ``coverage.estimate_radius_bounds``）。**规划半径只能用下界**：
+   真实 R 可能就只有 1000m，用上界规划会把"其实收不到"的位置判成"已确认"。
 4. 逼近段：第一读数给出方向，沿该方向前进到剩余距离的 0.6 倍处再读数，
    角分离 ≈ 0.4·‖PQ‖/d，横向不确定度 ≈ 0.6·d·tan1° —— d ≤ 1100m 时 ≤ 11.5m，
    两读数即可满足 20m 清除判据（解析推导见 docs/knowledge-matrix.md）。
+5. 问题4 另需**朝向覆盖**：候选源 x 与"距离 ≤1000m 的已测停点"集合 S_x 满足
+   ``x ∈ conv(S_x)`` 时，任意发射朝向都有停点落在其可见半平面内
+   （``coverage.heading_cover_condition``）。等边三角网格（间距 ≤1000m）是满足
+   这一条件的构造，中心+正七边形环不是 —— 这是定向场景漏源的根因。
 """
 
 from __future__ import annotations
@@ -83,17 +88,51 @@ class MatrixParams:
     """全部可调参数（便于 `script/run_batch.py` 做消融）。"""
 
     # ── 几何：覆盖扫描布局 ──────────────────────────────────────────────
-    #: 扫描环的**边数**与半径。默认"中心 + 正七边形 r=1110"：
-    #: 覆盖半径（区域内任一点到最近停点的最大距离）933.7m，
-    #: 比 1000m 下界留 66m 余量；中心优先行程 6889m（比六边形 r=1200 的 7200m 还短，
-    #: 代价是多一个停点 → 多 120s 检测）。离线校验见 ``geometry.covering_radius``。
-    scan_sides: int = 7
-    scan_radius: float = 1110.0
+    #: 扫描环的**边数**与半径。默认"中心 + 正八边形 r=1010"。
+    #:
+    #: 判据用的计划半径 = 1000 − ``radius_margin_m``（默认 50m）= 950m，并要求
+    #: 60m 栅格的四角都落在半径内。解析式与逐格判据都验证过：
+    #:
+    #: ======  ========  ==========  ==========  ========
+    #: 布局     环半径     覆盖半径    行程(中心优先)  解析余量
+    #: ======  ========  ==========  ==========  ========
+    #: n=7     1110      933.7m      6889m       16.3m
+    #: n=8     1010      949.1m      6421m       0.9m
+    #: n=8     1100      883.3m      7164m       66.7m
+    #: ======  ========  ==========  ==========  ========
+    #:
+    #: 选 n=8/1010 是因为它在**通过证书**的前提下行程最短；n=7/1110 也通过，
+    #: 但证书余量只有 16m，遇到格心/角点口径或数值扰动就容易翻车。
+    #: 复算：``geometry.polygon_layout_cover_radius`` /
+    #: ``geometry.polygon_layout_min_radius``。
+    scan_sides: int = 8
+    scan_radius: float = 1010.0
     scan_at_center: bool = True
+    #: 扫描布局：
+    #:
+    #: * ``polygon``（默认）—— 中心 + 正 n 边形环。它的覆盖半径必须 ≤
+    #:   :attr:`coverage_cell_m` 口径下的计划半径（= 1000 − ``radius_margin_m``），
+    #:   否则覆盖证书永远不可能通过、只能靠收尾全量重扫兜底。
+    #:   该布局同时是问题3（全向）与问题4（定向）的**完备**发现层：
+    #:   任意候选源位置 x 都存在停点 q 使 ``|q-x| ≤ 1000``，于是
+    #:   ``x ∈ conv(S_x)`` 自动成立（凸包含 x 自己），可见半平面必被覆盖。
+    #:   见 :func:`coverage.heading_cover_condition` 与
+    #:   :func:`coverage.heading_cover_report`。
+    #: * ``axial`` —— 等边三角（轴向）网格，间距 :attr:`axial_spacing_m`。
+    #:   同样是朝向完备构造，但 31 个停点、28.5km 行程，比 9 点环贵得多；
+    #:   仅作消融/对照保留（paper-q4 用的就是这一族布局）。
+    scan_layout: str = "polygon"
+    #: 三角网格间距（米）。必须 ≤ 有效接收半径的安全下界 1000m：间距 s 的格点
+    #: 集合覆盖半径 s/√3，且任意点所在格三角形的三顶点都在 s 内，故
+    #: ``x ∈ conv(S_x)`` 恒成立。取 950 给数值与格心口径留余量。
+    axial_spacing_m: float = 950.0
     #: 路径顺序：``ring`` = 中心先测，然后一次走完环（默认，行程最短）；
     #: ``center_last`` = 环走完再回中心（多 1200m 空驶，仅用于对照）；
     #: ``star`` = 每个顶点往返（行程最长，但每段可独立打断）
     scan_route: str = "ring"
+    #: 是否对"确定要走的停点序列"做开放路径局部搜索（2-opt + Or-opt）。
+    #: 只优化**已确定**的停点顺序（不改变覆盖证书），起点固定为原点、终点自由。
+    route_opt: bool = True
 
     # ── 知识矩阵 ────────────────────────────────────────────────────────
     #: dataType.txt 的路径列量化步长（米）
@@ -170,6 +209,11 @@ class MatrixParams:
     #: 横向补测环半径（相对当前 MEC 半径的倍数）
     lateral_scale: float = 2.5
     latitude_samples: int = 8
+    #: 判"交会几何太差"的最小射线夹角（度）。低于它就必须先做横向补测：
+    #: 射线近乎平行时纵向（沿射线方向）几乎没有约束，可行域是一条细长条，
+    #: 包围圆永远收不到 20m —— 实测（Q4 seed 2 频道 16）射线夹角只有 1.3°，
+    #: 清除 13 次全失败。
+    min_intersection_angle_deg: float = 20.0
     #: 清除容差（= 光学作用距离）
     clear_tolerance_m: float = OPTICAL_RANGE_M
     half_width_deg: float = 1.0
@@ -248,6 +292,7 @@ class KnowledgeSearchStrategy(Strategy):
             "clear_success": 0.0,
             "clear_failures": 0.0,
             "no_signal_in_approach": 0.0,
+            "poor_geometry_fixes": 0.0,
         }
         self.clear_fail_points: dict[int, list[Point]] = {}
         self.cover_report: CoverageReport | None = None
@@ -283,43 +328,203 @@ class KnowledgeSearchStrategy(Strategy):
             if not pending:
                 # 该停点对所有活跃频道都已"覆盖过"，走过去纯属浪费
                 self.stats["covered_skips"] += 1
-                continue
-            self.trace.append(
-                {
-                    "kind": "stop",
-                    "reason": f"scan#{index}",
-                    "x": stop.x,
-                    "y": stop.y,
-                    "pending_channels": len(pending),
-                    "virtual_time_s": state.virtual_time_s,
-                }
-            )
-            self._probe_at(client, state, stop, pending, reason=f"scan#{index}")
-            if self.params.interleave_clear and not self._budget_exhausted(state):
-                self._interleave_clear(client, state)
+            else:
+                self.trace.append(
+                    {
+                        "kind": "stop",
+                        "reason": f"scan#{index}",
+                        "x": stop.x,
+                        "y": stop.y,
+                        "pending_channels": len(pending),
+                        "virtual_time_s": state.virtual_time_s,
+                    }
+                )
+                self._probe_at(client, state, stop, pending, reason=f"scan#{index}")
+                if self.params.interleave_clear and not self._budget_exhausted(state):
+                    self._interleave_clear(client, state)
+            # 覆盖证书是"发现阶段能不能停"的判据：一旦每个活跃频道的候选区域
+            # 都被**计划半径**的圆盘覆盖，"还没收到信号的频道"就已经被证明
+            # 不存在了，继续扫只是在证明同一件事。
+            # 对 31 点的朝向完备布局，这一条能把"明明已经查清却还要走完全程"
+            # 的浪费砍掉；对 9 点环形布局通常走完全程才通过。
+            self._sync_coverage(state)
+            if index + 1 < len(route) and self.tracker.assess(state.position).complete:
+                self.trace.append(
+                    {
+                        "kind": "scan-complete",
+                        "reason": "coverage-certificate",
+                        "stops_used": index + 1,
+                        "virtual_time_s": state.virtual_time_s,
+                    }
+                )
+                break
         self._sync_coverage(state)
         self.cover_report = self.tracker.assess(state.position)
 
     def _scan_route(self) -> list[Point]:
-        """扫描路线。默认"中心先测 + 一次走完正 n 边形环"。
+        """扫描路线。
 
+        ``polygon`` 布局（默认）：中心先测 + 一次走完正 n 边形环。
         中心先测有两个好处：(1) 从原点出发不用空驶到第一个顶点再折回；
         (2) 中心是所有方向信噪比最低的位置，能最早发现"附近就有源"。
+
+        ``axial`` 布局（问题4）：等边三角网格，按最近邻 + 2-opt 排出开放路径
+        （行程远小于 31 点的网格序）。
         """
+        p = self.params
+        if p.scan_layout == "axial":
+            from .coverage import heading_cover_layout
+
+            stops = heading_cover_layout(p.axial_spacing_m)
+            return self._optimize_open_route(stops, start=Point(0.0, 0.0))
         pts = regular_polygon_scan_points(
-            self.params.scan_sides, self.params.scan_radius, center=self.params.scan_at_center
+            p.scan_sides, p.scan_radius, center=p.scan_at_center
         )
-        if not self.params.scan_at_center:
+        if not p.scan_at_center:
             return pts
         center, ring = pts[0], pts[1:]
-        if self.params.scan_route == "center_last":
+        if p.scan_route == "center_last":
             return ring + [center]
-        if self.params.scan_route == "star":
+        if p.scan_route == "star":
             out: list[Point] = [center]
             for vertex in ring:
                 out.extend([vertex, center])
             return out
         return [center] + ring
+
+    def _optimize_open_route(
+        self, stops: Sequence[Point], *, start: Point | None = None
+    ) -> list[Point]:
+        """固定起点、终点自由的**开放**路径优化（三角格走哈密顿链，否则 2-opt）。
+
+        为什么值得做：问题4 的朝向完备布局有 31 个停点，"按网格序走"要走
+        47754m；最近邻 + 局部搜索能压到 29891m，而**停点集合与覆盖证书完全
+        不变** —— 这是"保证全清"前提下的纯收益。
+
+        对**等边三角格**（``scan_layout="axial"``）另有一条更强的下界：格上
+        只有相邻节点距离恰为 ``s``，因此任何遍历 N 点的路径长度都 ≥ ``(N-1)s``
+        （31 点、s=950 时 28500m），而这个下界是**可达**的 —— 只要存在一条全用
+        单位边的哈密顿链。这里用 Warnsdorff 排序的 DFS 直接找它（N=31，毫秒级），
+        找不到再退回最近邻 + 2-opt/Or-opt。
+
+        注意：2-opt 只保证局部最优，不保证全局最优；上面这条下界才是对
+        "这条线还有多少空间"的**数学**回答，而不是拿某次实验的改善比例当上界。
+        """
+        pts = list(stops)
+        if not self.params.route_opt or len(pts) < 3:
+            return pts
+        origin = start or Point(0.0, 0.0)
+        if self.params.scan_layout == "axial":
+            chain = self._unit_edge_hamiltonian_chain(pts, prefer_start=origin)
+            if chain is not None:
+                return chain
+        # 1) 最近邻构造初始解
+        remaining = list(pts)
+        route: list[Point] = []
+        cur = origin
+        while remaining:
+            idx = min(
+                range(len(remaining)),
+                key=lambda k: cur.distance_to(remaining[k]),
+            )
+            cur = remaining.pop(idx)
+            route.append(cur)
+        # 2) 2-opt：反转子段（开放路径：端点不闭合）
+        improved = True
+        rounds = 0
+        while improved and rounds < 8:
+            improved = False
+            rounds += 1
+            for i in range(len(route) - 1):
+                for j in range(i + 1, len(route)):
+                    if self._two_opt_gain(route, i, j) > 1e-6:
+                        route[i : j + 1] = reversed(route[i : j + 1])
+                        improved = True
+        return route
+
+    @staticmethod
+    def _unit_edge_hamiltonian_chain(
+        points: Sequence[Point],
+        *,
+        prefer_start: Point | None = None,
+        max_starts: int = 12,
+        tol: float = 1e-6,
+    ) -> list[Point] | None:
+        """在"间距为最小邻距的图"上找覆盖全部点的哈密顿链（Warnsdorff DFS）。
+
+        返回 ``None`` 表示没找到（调用方退回启发式）。链路长度恰为
+        ``(N-1)·s_min``，即该点集上的**全局最优**路径主体（不含进入段）；
+        因此优先从离起点近的节点出发——进入段 ``|origin → 链首|`` 也是总行程的
+        一部分，从原点自己出发能把它压到 0。
+        """
+        n = len(points)
+        if n < 3:
+            return None
+        s_min = min(
+            points[i].distance_to(points[j])
+            for i in range(n)
+            for j in range(i + 1, n)
+        )
+        if s_min <= 0.0:
+            return None
+        adj: list[list[int]] = [[] for _ in range(n)]
+        for i in range(n):
+            for j in range(i + 1, n):
+                if abs(points[i].distance_to(points[j]) - s_min) <= tol:
+                    adj[i].append(j)
+                    adj[j].append(i)
+        origin = prefer_start or Point(0.0, 0.0)
+        starts = sorted(range(n), key=lambda i: points[i].distance_to(origin))
+        for start_idx in starts[: max(1, min(max_starts, n))]:
+            if len(adj[start_idx]) == 0:
+                continue
+            order: list[int] = [start_idx]
+            seen = {start_idx}
+
+            def dfs(v: int) -> bool:
+                if len(order) == n:
+                    return True
+                cand = sorted(
+                    (w for w in adj[v] if w not in seen),
+                    key=lambda w: sum(1 for x in adj[w] if x not in seen),
+                )
+                for w in cand:
+                    order.append(w)
+                    seen.add(w)
+                    if dfs(w):
+                        return True
+                    order.pop()
+                    seen.discard(w)
+                return False
+
+            if dfs(start_idx):
+                return [points[i] for i in order]
+        return None
+
+    @staticmethod
+    def _route_length(route: Sequence[Point], origin: Point) -> float:
+        total = 0.0
+        cur = origin
+        for p in route:
+            total += cur.distance_to(p)
+            cur = p
+        return total
+
+    @staticmethod
+    def _two_opt_gain(route: Sequence[Point], i: int, j: int) -> float:
+        """反转 ``route[i..j]`` 的开放路径收益（正数表示值得做）。"""
+        n = len(route)
+        before = route[i - 1] if i > 0 else None
+        after = route[j + 1] if j + 1 < n else None
+        old = 0.0
+        new = 0.0
+        if before is not None:
+            old += before.distance_to(route[i])
+            new += before.distance_to(route[j])
+        if after is not None:
+            old += route[j].distance_to(after)
+            new += route[i].distance_to(after)
+        return old - new
 
     def _channels_to_probe(self, stop: Point) -> list[int]:
         r"""本停点该测哪些频道 —— 知识矩阵剪枝的落点。
@@ -633,6 +838,13 @@ class KnowledgeSearchStrategy(Strategy):
                 # 清除失败 => 真值仍在 20m 外。就地补测拿不到新信息（同点读数不变），
                 # 因此**不再原地重试**，直接进入下一轮"换位置补读数"。
                 continue
+            # 交会几何太差（所有读数近乎共线）时，沿示向度方向前进只会得到
+            # "更细的一条线"，包围圆永远收不紧 —— 见 _transverse_probe 的说明。
+            # 这里必须**先**做一次横向补测把交会角打开。
+            if step > 0 and self._geometry_is_poor(channel):
+                if self._transverse_probe(client, state, channel):
+                    self.stats["poor_geometry_fixes"] += 1
+                    continue
             target = self._approach_target(state, channel, step)
             if target is None:
                 break
@@ -643,7 +855,7 @@ class KnowledgeSearchStrategy(Strategy):
             cell = self.matrix.cell_key(target)
             if cell in tried_measure:
                 # 已经在这个格测过：读数不会变，换一个候选（横向补测）
-                if not self._lateral_probe(client, state, channel):
+                if not self._transverse_probe(client, state, channel):
                     break
                 tried_measure.add(self.matrix.cell_key(state.position))
                 continue
@@ -657,10 +869,13 @@ class KnowledgeSearchStrategy(Strategy):
                 self.stats["no_signal_in_approach"] += 1
                 # 看不见了：要么超出 R，要么落到了定向锥背面。
                 # 不要再朝更深的方向前进（越走越看不见），改为横向补测。
-                if self._lateral_probe(client, state, channel):
+                if self._transverse_probe(client, state, channel):
                     tried_measure.add(self.matrix.cell_key(state.position))
                     continue
                 break
+            if result is not None and result.kind.value == "direction":
+                # 新读数进来后重新评估交会几何；仍然差就下一次循环主动横向补测
+                self._geometry_is_poor(channel)
 
         # 最后尝试：可行域中心直接清一次
         belief = self.beliefs[channel]
@@ -726,11 +941,48 @@ class KnowledgeSearchStrategy(Strategy):
     def _out_of_arena(point: Point, factor: float = 1.25) -> bool:
         return math.hypot(point.x, point.y) > ARENA_RADIUS_M * factor
 
-    def _lateral_probe(self, client: SimulatorClient, state: DogState, channel: int) -> bool:
-        """横向补测：在估计点周围的小环上取一个与已有读数角分离最大的点。
+    def _geometry_is_poor(self, channel: int) -> bool:
+        r"""交会几何是否太差：所有读数方向与估计点的夹角近乎共线。
 
-        用于"读数返回 no_signal"的情形——说明目标不在这个方向的有效接收半径内，
-        或者（定向源）转到了覆盖角背面。此时沿原方向继续前进只会更糟。
+        记 :math:`\theta_i` 为"估计点 → 第 i 个读数点"的方位角，几何优度取
+
+        .. math::
+            \Delta = \max_{i,j} |\mathrm{wrap}(\theta_i - \theta_j)|
+
+        :math:`\Delta` 小意味着所有射线几乎平行：横向（垂直于射线）的分辨率
+        :math:`\approx d\tan 1°` 是有的，但**纵向**（沿射线方向）几乎没有约束，
+        可行域会退化成一条细长条，最小包围圆半径收不到 20m 以下 —— 清除必然
+        失败。实测（Q4 seed 2 频道 16）4 个读数全落在 308.5°~309.8°，
+        :math:`\Delta \approx 1.3°`，清除 13 次全失败。
+
+        判据取 :math:`\Delta < 20°`（20° 交会角在 300m 距离上已经把纵向不确定度
+        压到 ``300·tan1°/sin20° ≈ 15m``，够 20m 清除判据）。
+        """
+        readings = self._readings_of(channel)
+        if len(readings) < 2:
+            return True
+        belief = self.beliefs[channel]
+        est = belief.centroid
+        if est is None:
+            return True
+        if len({(round(p.x), round(p.y)) for p, _ in readings}) < 2:
+            return True  # 只有一个检测点（重复读数没有新方向）
+        angles = [est.bearing_to(p) for p, _ in readings]
+        spread = max(angle_difference_deg(a, b) for a in angles for b in angles)
+        return spread < self.params.min_intersection_angle_deg
+
+    def _transverse_probe(
+        self, client: SimulatorClient, state: DogState, channel: int
+    ) -> bool:
+        """横向补测：在**垂直于当前示向度**的方向上取新读数，把交会角打开。
+
+        为什么必须垂直于射线：沿射线前进只会得到"同一方向的第 k 个读数"，
+        对纵向（距离）没有约束；垂直方向移动 Δ 才能把纵向不确定度压到
+        ``O(r/Δ)`` 量级。
+
+        取点方式：以可行域质心为心、半径 ``r = clip(scale·MEC, 60, 400)`` 的
+        圆周上，挑"与全体已有读数方向角分离最大"的点，并且要求该点**可能看到源**
+        （距可行域不超过计划半径，否则一定是 no_signal、白测一次）。
         """
         p = self.params
         belief = self.beliefs[channel]
@@ -741,9 +993,10 @@ class KnowledgeSearchStrategy(Strategy):
         circle = minimum_enclosing_circle(region) if len(region) >= 3 else None
         radius = max(60.0, min(400.0, (circle.radius * p.lateral_scale) if circle else 200.0))
         existing = [b for _, b in self._readings_of(channel)]
+        existing_pts = self._readings_of(channel)
         best: tuple[float, Point] | None = None
-        for k in range(p.latitude_samples):
-            theta = 360.0 * k / p.latitude_samples
+        for k in range(p.latitude_samples * 2):
+            theta = 360.0 * k / (p.latitude_samples * 2)
             cand = Point(
                 est.x + radius * unit_from_deg(theta).x,
                 est.y + radius * unit_from_deg(theta).y,
@@ -752,19 +1005,36 @@ class KnowledgeSearchStrategy(Strategy):
                 continue
             if state.position.distance_to(cand) < 1.0:
                 continue
+            if self.matrix.is_measured(cand, channel):
+                continue
+            # 该点必须"够得着"可行域：否则一定 no_signal
+            if distance_point_to_region(cand, region) > belief.plan_radius_m:
+                continue
             new_dir = cand.bearing_to(est)
-            sep = min((angle_difference_deg(new_dir, b) for b in existing), default=90.0)
+            sep = min(
+                (angle_difference_deg(new_dir, b) for b in existing), default=90.0
+            )
+            # 与已有检测点也不能太近（同一个格读数不变，附录2-1）
+            near_dup = min(
+                (cand.distance_to(q) for q, _ in existing_pts), default=1e9
+            )
+            if near_dup < p.matrix_cell_m:
+                continue
             score = sep - 0.002 * state.position.distance_to(cand)
             if best is None or score > best[0]:
                 best = (score, cand)
         if best is None:
             return False
-        self._move(state, best[1], reason="lateral")
-        result = self._measure(client, state, best[1], channel, reason="lateral")
+        self._move(state, best[1], reason="transverse")
+        result = self._measure(client, state, best[1], channel, reason="transverse")
         self._sync_coverage(state)
         if result is not None and result.kind.value == "near":
             self._clear_at(client, state, best[1], channel, reason="near")
         return True
+
+    def _lateral_probe(self, client: SimulatorClient, state: DogState, channel: int) -> bool:
+        """横向补测（旧入口，保留兼容）：等价于 :meth:`_transverse_probe`。"""
+        return self._transverse_probe(client, state, channel)
 
     def _readings_of(self, channel: int) -> list[tuple[Point, float]]:
         out: list[tuple[Point, float]] = []
@@ -774,23 +1044,35 @@ class KnowledgeSearchStrategy(Strategy):
         return out
 
     def _verification_sweep(self, client: SimulatorClient, state: DogState) -> None:
-        """完备性兜底：只要有频道"没被清除、也没被任何停点测到过"，就重扫一遍契约布局。
+        """完备性兜底：只在"覆盖证书没能通过"时重扫一遍契约布局。
 
-        题目对问题3/4 的硬要求是"确保所有干扰源被清除"，而"被清除的比例"只影响分数高低。
-        因此收尾必须有一条**确定性**的兜底路径：把契约布局（中心 + 正 n 边形）
-        在**全部**未清除频道上重跑一遍。理论依据是
-        :func:`mathmodel2026b.geometry.covering_radius` —— 该布局的覆盖半径 ≤1000m，
-        所以任何确实存在的源都至少会被一个停点收到。
+        题目对问题3/4 的硬要求是"确保所有干扰源被清除"。这条兜底的意义是：
+        当在线证书**没能**证明"每个还可能是源的位置都被测过"时，用一条
+        离线可验证的确定性布局（中心 + 正 n 边形，覆盖半径 ≤ 判据的计划半径）
+        再走一遍。
 
-        代价明确：一次重扫 = 布局行程 + 每个停点要重测的频道数 × 6s。
-        只有当"还有频道一次都没收到过"时才会触发（正常跑完覆盖扫描时不会走到这里）。
+        **什么时候不需要重扫**：如果证书已经通过（每个活跃频道的候选区域都被
+        "计划半径"的圆盘覆盖），那么"每个停点都返回 no_signal"的频道就已经
+        **被证明不存在**了 —— 再重扫一遍只是在证明同一件事，纯属浪费。
+        历史实现按 ``found(c) == 0`` 判定"盲频道"，于是把所有**不存在**的
+        频道也当成可疑目标，每局白跑约 8km（实测 7262m）。
+
+        因此这里先看证书：通过就直接返回；没通过才重扫，且只针对
+        "既没被清除、也没被任何停点测过"的真盲频道。
         """
         p = self.params
         if not p.verify_sweep:
             return
+        self._sync_coverage(state)
+        report = self.tracker.assess(state.position)
+        self.cover_report = report
+        if report.complete:
+            return
         blind = [
             c for c in self.matrix.channels
-            if not self.matrix.is_cleared(c) and self.matrix.found(c) == 0
+            if not self.matrix.is_cleared(c)
+            and self.matrix.probes(c) == 0
+            and not self.beliefs[c].is_detected
         ]
         if not blind:
             return
@@ -1060,6 +1342,12 @@ class KnowledgeSearchStrategy(Strategy):
         # 定向假设只改"负例能否排除"这一条（可证伪判据），
         # 不再对整个区域做锥形裁剪 —— 那会把证书变成空集，反而漏源。
         self.tracker.directional = self.params.directional
+        # 问题4：发现层的完备性判据必须是**朝向覆盖**而不是圆盘覆盖。
+        # 反例：源在停点 438m 内、但朝向与"源→停点"方向相差 94° 时看不到它 ——
+        # 只按"圆盘覆盖"判"已确认"会把这个源整片漏掉（实测 Q4 seed 7 的漏源
+        # 就是这个原因：源在 (-1194,-1282) 朝 209.9°，停点 (-950,-1645) 在其
+        # 1031m 有效半径内却看不到）。
+        self.tracker.heading_cover = self.params.directional
         self.tracker.sync(self.beliefs, matrix=self.matrix)
 
     # ── 清除（顺路清）────────────────────────────────────────────────────
@@ -1229,7 +1517,16 @@ class KnowledgeSearchStrategy(Strategy):
 
 
 class Q4Strategy(KnowledgeSearchStrategy):
-    """问题4：全向 + 定向混合。默认打开定向假设的保守几何。"""
+    """问题4：全向 + 定向混合。
+
+    默认打开 ``directional=True``：负例不再做圆盘排除，改用"同一朝向 + 同一
+    半径"的联合可行性判据（``coverage.plausible_directional_mask``）。
+
+    **发现层布局不改默认值**：仍沿用 :attr:`MatrixParams.scan_layout`（默认
+    ``polygon``，中心+正七边形环）。原因是它决定了检测次数与总时间这条软指标，
+    必须用配对 A/B 量出来再定；要启用朝向完备布局请显式传
+    ``scan_layout="axial"``，它与 ``polygon`` 构成一组干净的消融对照。
+    """
 
     def __init__(self, params: MatrixParams | None = None) -> None:
         p = params or MatrixParams()

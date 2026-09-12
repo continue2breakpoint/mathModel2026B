@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from math import cos, hypot, pi, radians, sin, sqrt, tan
 from random import Random
 from typing import Iterable, Sequence
@@ -369,6 +370,60 @@ def regular_polygon_scan_points(sides: int, radius: float, center: bool = True) 
     for k in range(sides):
         points.append(from_polar(radius, 360.0 * k / sides))
     return points
+
+
+def polygon_layout_cover_radius(sides: int, ring_radius: float, arena_radius: float = ARENA_RADIUS_M) -> float:
+    r""""中心 + 正 ``sides`` 边形环"布局对目标圆域的**解析**覆盖半径。
+
+    覆盖半径 = 区域内任一点到最近停点的最大距离。该布局的两个"最难覆盖"
+    位置是一内一外，解析上都能求出来：
+
+    * **内切点**：环上相邻两顶点中垂线与"中心—环心"连线的交点，
+      :math:`r = \rho\cos(\pi/n)`，到最近顶点的距离
+      :math:`\rho\sin(\pi/n)`；
+    * **外缘最远点**：目标圆上离某个环顶点最远的点（相邻两个环顶点所夹
+      圆弧的中点方向），距离 :math:`\sqrt{\omega^2+\rho^2-2\omega\rho\cos(\pi/n)}`。
+
+    返回两者中的较大值。用它可以直接判定布局是否满足覆盖证书：
+    ``cover_radius <= 计划半径`` 才叫"证书自洽"。
+    """
+    theta = math.pi / max(1, sides)
+    inner = ring_radius * math.sin(theta)
+    outer = sqrt(
+        arena_radius * arena_radius
+        + ring_radius * ring_radius
+        - 2.0 * arena_radius * ring_radius * math.cos(theta)
+    )
+    return max(inner, outer)
+
+
+def polygon_layout_min_radius(
+    sides: int,
+    cover_radius: float,
+    arena_radius: float = ARENA_RADIUS_M,
+) -> float:
+    r"""给定覆盖半径上限，求"中心 + 正 ``sides`` 边形环"的最小可行环半径。
+
+    覆盖半径的两个分量都随 ``\rho`` 变化：内切分量单调递增
+    （``\rho\sin\theta``），外缘分量先减后增并在
+    :math:`\rho=\omega\cos\theta` 处取得极小。因此可行集是
+    :math:`[\rho_{lo},\rho_{hi}]`，两端分别由"外缘"和"内切"约束给出::
+
+        \rho_{hi} = R_c / \sin\theta
+        \rho_{lo} = \omega\cos\theta - \sqrt{R_c^2 - \omega^2\sin^2\theta}
+
+    （``sides`` 太小或 ``cover_radius`` 太小时根号内为负 ⇒ 该边数**无解**，
+    返回 ``math.inf``，表示这种布局不可能满足证书。）
+    """
+    theta = math.pi / max(1, sides)
+    hi = cover_radius / math.sin(theta)
+    disc = cover_radius * cover_radius - arena_radius * arena_radius * math.sin(theta) ** 2
+    if disc < 0.0:
+        return math.inf
+    lo = arena_radius * math.cos(theta) - sqrt(disc)
+    if lo > hi:
+        return math.inf
+    return max(0.0, lo)
 
 
 def covering_radius(points: Sequence[Point], sample_rings: int = 400) -> float:

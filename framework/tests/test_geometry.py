@@ -11,6 +11,8 @@ from mathmodel2026b.geometry import (
     clip_by_bearing,
     covering_radius,
     feasible_region,
+    polygon_layout_cover_radius,
+    polygon_layout_min_radius,
     minimum_enclosing_circle,
     polygon_area,
     polygon_centroid,
@@ -190,3 +192,77 @@ def _contains(poly: list[Point], p: Point, eps: float = 1e-6) -> bool:
         elif s != sign:
             return False
     return True
+
+
+def test_analytic_cover_radius_matches_numeric() -> None:
+    """解析覆盖半径必须与逐点采样一致（否则布局判据就是在自欺）。"""
+    from mathmodel2026b.geometry import regular_polygon_scan_points
+
+    for sides, ring in ((6, 1200.0), (7, 1110.0), (8, 1010.0), (9, 968.0)):
+        analytic = polygon_layout_cover_radius(sides, ring)
+        numeric = covering_radius(
+            regular_polygon_scan_points(sides, ring, center=True), sample_rings=200
+        )
+        assert analytic == pytest.approx(numeric, abs=3.0), (sides, ring)
+
+
+def test_default_matrix_layout_passes_its_own_certificate() -> None:
+    """矩阵策略的默认扫描布局必须满足**它自己**的覆盖判据。
+
+    判据用的计划半径 = 1000 − ``radius_margin_m``（默认 50m）= 950m，
+    并且要求 60m 栅格的四角都在半径内。解析式
+    :func:`polygon_layout_cover_radius` 与逐格判据都要过。
+    """
+    from mathmodel2026b.coverage import CoverageGrid, CoverageTracker, build_beliefs
+    from mathmodel2026b.geometry import regular_polygon_scan_points
+    from mathmodel2026b.knowledge import KnowledgeMatrix
+    from mathmodel2026b.strategy_matrix import MatrixParams
+
+    p = MatrixParams()
+    plan_radius = 1000.0 - p.radius_margin_m
+    analytic = polygon_layout_cover_radius(p.scan_sides, p.scan_radius)
+    assert analytic <= plan_radius, (p.scan_sides, p.scan_radius, analytic)
+
+    # 逐格判据也必须通过（这是策略真正使用的那条）
+    grid = CoverageGrid(cell_m=p.coverage_cell_m)
+    matrix = KnowledgeMatrix(cell_m=p.matrix_cell_m)
+    tracker = CoverageTracker(grid, matrix)
+    tracker.sync(build_beliefs(matrix), matrix=matrix)
+    tracker.observe_stops(
+        regular_polygon_scan_points(p.scan_sides, p.scan_radius, center=True)
+    )
+    assert tracker.assess().complete
+
+    # 解析最小环半径与布局一致
+    assert polygon_layout_min_radius(p.scan_sides, plan_radius) <= p.scan_radius
+
+
+def test_ring_layout_is_not_a_heading_cover_but_the_lattice_is() -> None:
+    """环形布局**不是**问题4 的朝向完备发现层，三角网格才是。
+
+    常见误解："只要区域内每一点都有 ≤1000m 的停点，就有 x ∈ conv(S_x)"。
+    这是错的 —— 凸包需要的是"停点把 x **围起来**"，而不是"有一个停点在附近"。
+    实测：中心 + 正八边形 r=1010 时，最坏位置 (811.8, 1606.5) 附近只有 1 个
+    停点在 1000m 内，凸包退化成单点，到凸包距离 897.7m ⇒ 该位置的定向源
+    可以朝外发射而完全不被发现。
+
+    真正可证的构造是等边三角网格（间距 ≤1000m）：任意点所在格三角形的三个
+    顶点都在 1000m 内，而 x 属于这个三角形的凸包。
+    """
+    from mathmodel2026b.coverage import heading_cover_layout, heading_cover_report
+    from mathmodel2026b.geometry import regular_polygon_scan_points
+    from mathmodel2026b.protocol import MIN_EFFECTIVE_RADIUS_M
+    from mathmodel2026b.strategy_matrix import MatrixParams
+
+    p = MatrixParams()
+    ring = regular_polygon_scan_points(p.scan_sides, p.scan_radius, center=True)
+    rep = heading_cover_report(ring, step_m=60.0)
+    # 圆盘覆盖成立……
+    assert rep["worst_nearest_m"] <= MIN_EFFECTIVE_RADIUS_M, rep
+    # ……但朝向覆盖**不**成立
+    assert rep["worst_hull_m"] > 100.0, rep
+
+    lattice = heading_cover_layout(950.0)
+    rep2 = heading_cover_report(lattice, step_m=60.0)
+    assert rep2["worst_hull_m"] <= 1e-6, rep2
+    assert rep2["worst_nearest_m"] <= MIN_EFFECTIVE_RADIUS_M, rep2
