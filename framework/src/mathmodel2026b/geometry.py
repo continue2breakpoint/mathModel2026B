@@ -341,10 +341,33 @@ def region_clear_circle(
 # 覆盖扫描（问题3 第一阶段的确定性搜索）
 # ---------------------------------------------------------------------------
 def regular_hexagon_scan_points(radius: float = 1400.0) -> list[Point]:
-    """圆心 + 半径 ``radius`` 正六边形六顶点，共 7 个点。"""
+    """圆心 + 半径 ``radius`` 正六边形六顶点，共 7 个点（旧实现的默认布局）。"""
     points = [Point(0.0, 0.0)]
     for k in range(6):
         points.append(from_polar(radius, 60.0 * k))
+    return points
+
+
+def regular_polygon_scan_points(sides: int, radius: float, center: bool = True) -> list[Point]:
+    """圆心 + 半径 ``radius`` 正 ``sides`` 边形顶点。
+
+    ``geometry.covering_radius`` 可以离线校验"区域内任一点到最近检测点的最大距离"
+    是否 ≤ 1000m（附录2-2 给出的有效接收半径下界）。实测常用组合：
+
+    =======================  =============  =============
+    布局                      覆盖半径       中心优先行程
+    =======================  =============  =============
+    中心 + 正六边形 r=1200      968.9m          7200m
+    中心 + 正七边形 r=1110      933.7m          6889m
+    中心 + 正八边形 r=1100      889.6m          7164m
+    =======================  =============  =============
+
+    1~2 个停点的差别在"每停点 20 频道检测 120s"面前不敏感，但覆盖半径的余量
+    （31m vs 66m）在"确保全部清除"这条硬约束前很值钱。
+    """
+    points: list[Point] = [Point(0.0, 0.0)] if center else []
+    for k in range(sides):
+        points.append(from_polar(radius, 360.0 * k / sides))
     return points
 
 
