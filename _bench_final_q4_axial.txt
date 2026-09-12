@@ -1,0 +1,130 @@
+  [upstream] seed=1   clear=11/11 vt=    5400 avg=  490.9 dist=  22215 meas= 153 clear_calls= 11
+  [upstream] seed=2   clear=11/16 vt=    5974 avg=  543.1 dist=  23879 meas= 195 clear_calls= 15
+  [upstream] seed=3   clear= 9/11 vt=    5640 avg=  626.7 dist=  22942 meas= 171 clear_calls= 10
+  [upstream] seed=4   clear=11/11 vt=    5450 avg=  495.5 dist=  22421 meas= 154 clear_calls= 11
+  [upstream] seed=5   clear=14/14 vt=    5045 avg=  360.4 dist=  20245 meas= 157 clear_calls= 14
+  [upstream] seed=6   clear=14/16 vt=    7363 avg=  525.9 dist=  30431 meas= 210 clear_calls= 16
+  [upstream] seed=7   clear=10/12 vt=    4518 avg=  451.8 dist=  17333 meas= 170 clear_calls= 11
+  [upstream] seed=8   clear=11/11 vt=    5280 avg=  480.0 dist=  21367 meas= 161 clear_calls= 11
+  [upstream] seed=9   clear=11/13 vt=    5544 avg=  504.0 dist=  22116 meas= 182 clear_calls= 13
+  [upstream] seed=10  clear=14/14 vt=    4655 avg=  332.5 dist=  18360 meas= 153 clear_calls= 14
+  [upstream] seed=11  clear=10/13 vt=    4944 avg=  494.4 dist=  19750 meas= 160 clear_calls= 12
+  [upstream] seed=12  clear=10/13 vt=    7783 avg=  778.3 dist=  32671 meas= 208 clear_calls= 12
+  [upstream] seed=13  clear= 8/12 vt=    7364 avg=  920.5 dist=  30762 meas= 202 clear_calls= 11
+  [upstream] seed=14  clear= 9/10 vt=    5091 avg=  565.7 dist=  20535 meas= 159 clear_calls=  9
+  [upstream] seed=15  clear=11/11 vt=    4247 avg=  386.1 dist=  16519 meas= 149 clear_calls= 11
+  [upstream] seed=16  clear=12/12 vt=    4004 avg=  333.6 dist=  14904 meas= 163 clear_calls= 12
+  [upstream] seed=17  clear=11/14 vt=    6375 avg=  579.6 dist=  26031 meas= 191 clear_calls= 14
+  [upstream] seed=18  clear= 7/11 vt=    4684 avg=  669.1 dist=  18188 meas= 171 clear_calls=  9
+  [upstream] seed=19  clear=14/15 vt=    4611 avg=  329.4 dist=  18352 meas= 146 clear_calls= 14
+  [upstream] seed=20  clear=15/15 vt=    6279 avg=  418.6 dist=  25744 meas= 182 clear_calls= 15
+  [upstream] seed=21  clear=10/11 vt=    4991 avg=  499.1 dist=  19969 meas= 161 clear_calls= 10
+  [upstream] seed=22  clear=11/11 vt=    4920 avg=  447.2 dist=  19808 meas= 152 clear_calls= 11
+  [upstream] seed=23  clear=15/16 vt=    4569 avg=  304.6 dist=  17835 meas= 156 clear_calls= 16
+  [upstream] seed=24  clear=12/15 vt=    6756 avg=  563.0 dist=  27520 meas= 205 clear_calls= 15
+  [upstream] seed=25  clear= 9/13 vt=    5862 avg=  651.3 dist=  24233 meas= 165 clear_calls= 10
+  [upstream] seed=26  clear=13/15 vt=    5858 avg=  450.6 dist=  23939 meas= 170 clear_calls= 15
+  [upstream] seed=27  clear=12/15 vt=    5874 avg=  489.5 dist=  24227 meas= 164 clear_calls= 14
+  [upstream] seed=28  clear= 8/10 vt=    4349 avg=  543.6 dist=  16870 meas= 158 clear_calls= 10
+  [upstream] seed=29  clear=12/14 vt=    6328 avg=  527.4 dist=  26162 meas= 176 clear_calls= 13
+  [upstream] seed=30  clear=13/14 vt=    5100 avg=  392.3 dist=  20850 meas= 146 clear_calls= 14
+  [matrix  ] seed=1   clear=11/11 vt=   10179 avg=  925.3 dist=  38744 meas= 396 clear_calls= 11
+  [matrix  ] seed=2   clear=16/16 vt=   10086 avg=  630.4 dist=  40510 meas= 318 clear_calls= 16
+  [matrix  ] seed=3   clear=11/11 vt=   10033 avg=  912.1 dist=  37545 meas= 412 clear_calls= 11
+  [matrix  ] seed=4   clear=11/11 vt=   10042 avg=  912.9 dist=  37100 meas= 428 clear_calls= 11
+  [matrix  ] seed=5   clear=14/14 vt=   10387 avg=  741.9 dist=  40460 meas= 371 clear_calls= 14
+  [matrix  ] seed=6   clear=15/16 vt=   13199 avg=  879.9 dist=  55829 meas= 328 clear_calls= 18
+  [matrix  ] seed=7   clear=12/12 vt=   11673 avg=  972.8 dist=  45660 meas= 416 clear_calls= 13
+  [matrix  ] seed=8   clear=11/11 vt=   10004 avg=  909.5 dist=  37362 meas= 413 clear_calls= 11
+  [matrix  ] seed=9   clear=13/13 vt=    9963 avg=  766.4 dist=  38663 meas= 361 clear_calls= 13
+  [matrix  ] seed=10  clear=14/14 vt=    9916 avg=  708.3 dist=  39037 meas= 340 clear_calls= 14
+  [matrix  ] seed=11  clear=13/13 vt=   11167 avg=  859.0 dist=  44564 meas= 366 clear_calls= 14
+  [matrix  ] seed=12  clear=13/13 vt=   10501 avg=  807.8 dist=  40416 meas= 393 clear_calls= 13
+  [matrix  ] seed=13  clear=12/12 vt=    9641 avg=  803.4 dist=  36899 meas= 367 clear_calls= 12
+  [matrix  ] seed=14  clear=10/10 vt=   10212 avg= 1021.2 dist=  37529 meas= 443 clear_calls= 10
+  [matrix  ] seed=15  clear=11/11 vt=    9727 avg=  884.3 dist=  36891 meas= 383 clear_calls= 11
+  [matrix  ] seed=16  clear=12/12 vt=    9890 avg=  824.2 dist=  36706 meas= 415 clear_calls= 12
+  [matrix  ] seed=17  clear=14/14 vt=    9776 avg=  698.3 dist=  38772 meas= 326 clear_calls= 14
+  [matrix  ] seed=18  clear=11/11 vt=    9856 avg=  896.0 dist=  36512 meas= 417 clear_calls= 11
+  [matrix  ] seed=19  clear=15/15 vt=    9830 avg=  655.3 dist=  37471 meas= 377 clear_calls= 15
+  [matrix  ] seed=20  clear=15/15 vt=   10062 avg=  670.8 dist=  40348 meas= 321 clear_calls= 15
+  [matrix  ] seed=21  clear=11/11 vt=   10022 avg=  911.1 dist=  36655 meas= 440 clear_calls= 11
+  [matrix  ] seed=22  clear=11/11 vt=   10624 avg=  965.8 dist=  39770 meas= 436 clear_calls= 11
+  [matrix  ] seed=23  clear=16/16 vt=    9311 avg=  581.9 dist=  37909 meas= 275 clear_calls= 16
+  [matrix  ] seed=24  clear=15/15 vt=   10233 avg=  682.2 dist=  40309 meas= 350 clear_calls= 15
+  [matrix  ] seed=25  clear=13/13 vt=   10100 avg=  776.9 dist=  38583 meas= 387 clear_calls= 13
+  [matrix  ] seed=26  clear=15/15 vt=   11890 avg=  792.7 dist=  48527 meas= 354 clear_calls= 16
+  [matrix  ] seed=27  clear=15/15 vt=   10085 avg=  672.4 dist=  40542 meas= 318 clear_calls= 15
+  [matrix  ] seed=28  clear=10/10 vt=   10061 avg= 1006.1 dist=  37462 meas= 420 clear_calls= 10
+  [matrix  ] seed=29  clear=14/14 vt=   10328 avg=  737.7 dist=  40508 meas= 360 clear_calls= 14
+  [matrix  ] seed=30  clear=14/14 vt=    9708 avg=  693.4 dist=  38544 meas= 322 clear_calls= 14
+
+################ summary (directional) ################
+
+--- upstream ---
+  runs=30 errors=0 full_clear=9/30
+  cleared_ratio mean   = 0.8704
+  virtual_time  median = 5340.2 s
+  avg_clear     median = 494.93 s/源
+  move_distance median = 21741.6 m
+  measure_count median = 163.5
+  wall          median = 0.37 s
+  imperfect seeds: 2(11/16), 3(9/11), 6(14/16), 7(10/12), 9(11/13), 11(10/13), 12(10/13), 13(8/12), 14(9/10), 17(11/14), 18(7/11), 19(14/15), 21(10/11), 23(15/16), 24(12/15), 25(9/13), 26(13/15), 27(12/15), 28(8/10), 29(12/14), 30(13/14)
+
+--- matrix ---
+  runs=30 errors=0 full_clear=29/30
+  cleared_ratio mean   = 0.9979
+  virtual_time  median = 10061.5 s
+  avg_clear     median = 805.59 s/源
+  move_distance median = 38703.4 m
+  measure_count median = 374.0
+  wall          median = 8.09 s
+  imperfect seeds: 6(15/16)
+
+--- delta (matrix vs upstream, medians) ---
+  virtual_time      5340.2 ->   10061.5  (+88.4%)
+  move_distance    21741.6 ->   38703.4  (+78.0%)
+  measure_count      163.5 ->     374.0  (+128.7%)
+  avg_clear         494.93 ->    805.59  (+62.8%)
+  full_clear        9/30   ->   29/30  
+
+--- matrix odometer (median m per run) ---
+  dist:scan-leg            28500.0
+  dist:approach            10031.7
+  dist:revisit              2300.0
+  dist:refine-leg           1735.9
+  dist:last-resort           400.0
+  dist:transverse            192.6
+  dist:sweep                 126.9
+  dist:scan#0                  0.0
+  dist:scan#1                  0.0
+  dist:scan#10                 0.0
+  dist:scan#11                 0.0
+  dist:scan#12                 0.0
+  dist:scan#13                 0.0
+  dist:scan#14                 0.0
+  dist:scan#15                 0.0
+  dist:scan#16                 0.0
+  dist:scan#17                 0.0
+  dist:scan#18                 0.0
+  dist:scan#19                 0.0
+  dist:scan#2                  0.0
+  dist:scan#20                 0.0
+  dist:scan#21                 0.0
+  dist:scan#22                 0.0
+  dist:scan#23                 0.0
+  dist:scan#24                 0.0
+  dist:scan#25                 0.0
+  dist:scan#26                 0.0
+  dist:scan#27                 0.0
+  dist:scan#28                 0.0
+  dist:scan#29                 0.0
+  dist:scan#3                  0.0
+  dist:scan#30                 0.0
+  dist:scan#4                  0.0
+  dist:scan#5                  0.0
+  dist:scan#6                  0.0
+  dist:scan#7                  0.0
+  dist:scan#8                  0.0
+  dist:scan#9                  0.0
+  dist:refine                  0.0

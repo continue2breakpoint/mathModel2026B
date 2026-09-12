@@ -11,6 +11,14 @@ Usage::
     python _bench_ab.py --seeds 1-30                 # omni (Q3)
     python _bench_ab.py --seeds 1-30 --directional   # omni + directional mix (Q4)
     python _bench_ab.py --seeds 1-10 --only matrix
+    python _bench_ab.py --seeds 1-30 --directional --param scan_layout=axial
+
+.. note::
+   ``--directional`` 现在会**同时**把 ``directional=true`` 传进策略参数
+   （并按 ``strategy_matrix.Q4Strategy`` 构造矩阵策略）。历史版本只把
+   ``directional`` 传给场景生成器，策略仍以 ``directional=False`` 运行，
+   因此旧文档里"``--directional`` 下的矩阵结果"不能归因于定向逻辑 ——
+   这正是 ``docs/method-review-next-steps.md`` §2.4 指出的口径错误。
 """
 from __future__ import annotations
 
@@ -29,7 +37,7 @@ from mathmodel2026b.mock.world import generate_case  # noqa: E402
 from mathmodel2026b.state import DogState  # noqa: E402
 from mathmodel2026b.strategy import Q3Params, Q3Strategy  # noqa: E402
 from mathmodel2026b.strategy_matrix import MatrixParams  # noqa: E402
-from mathmodel2026b.strategy_matrix import KnowledgeSearchStrategy  # noqa: E402
+from mathmodel2026b.strategy_matrix import KnowledgeSearchStrategy, Q4Strategy  # noqa: E402
 
 ROBOT = "000000000000"
 
@@ -54,7 +62,12 @@ def run_one(seed: int, which: str, *, directional: bool, n_directional: int | No
         if which == "upstream":
             strategy = Q3Strategy(Q3Params())
         else:
-            strategy = KnowledgeSearchStrategy(MatrixParams(**params))
+            # 关键修正：``--directional`` 必须同时进入**策略参数**，否则矩阵策略
+            # 仍以全向假设运行，测出来的差异与定向逻辑无关。
+            matrix_params = MatrixParams(**{"directional": directional, **params})
+            strategy = (
+                Q4Strategy(matrix_params) if directional else KnowledgeSearchStrategy(matrix_params)
+            )
         client.enter()
         started = time.perf_counter()
         error = None

@@ -79,13 +79,19 @@ class _PaperQ3Arm:
         paper_q3.run_q3(env, route, mode=self.mode, verbose=False)
 
 
-def build(name: str):
+def build(name: str, *, scan_layout: str | None = None):
     if name == "q3":
         return Q3Strategy(Q3Params())
     if name == "matrix":
         return KnowledgeSearchStrategy(MatrixParams())
     if name == "matrix-dir":
-        return MatrixQ4Strategy(MatrixParams(directional=True))
+        # ``scan_layout="axial"`` = 31 点三角网格（**朝向完备**的发现层，
+        # 见 coverage.heading_cover_layout）；默认 polygon 布局的朝向覆盖
+        # 不完备，定向源会漏（实测 30 例只清 12 例）。
+        params = MatrixParams(directional=True)
+        if scan_layout:
+            params.scan_layout = scan_layout
+        return MatrixQ4Strategy(params)
     if name == "paper-q3":
         return _PaperQ3Arm("two_stage")
     if name == "paper-q4":
@@ -93,12 +99,19 @@ def build(name: str):
     raise SystemExit(f"未知策略：{name}")
 
 
-def run_one(seed: int, which: str, *, directional: bool, n_directional: int | None) -> dict:
+def run_one(
+    seed: int,
+    which: str,
+    *,
+    directional: bool,
+    n_directional: int | None,
+    scan_layout: str | None = None,
+) -> dict:
     case = generate_case(seed, omni_only=not directional, n_directional=n_directional)
     with MockSimulator(robot_id=ROBOT, case=case) as sim:
         client = HttpSimulatorClient(robot_id=ROBOT, base_url=sim.base_url, verbose=False)
         state = DogState()
-        strategy = build(which)
+        strategy = build(which, scan_layout=scan_layout)
         client.enter()
         started = time.perf_counter()
         error = None
@@ -133,6 +146,12 @@ def main() -> int:
     ap.add_argument("--n-directional", type=int, default=None,
                     help="固定定向源个数；默认由案例生成器随机（n_dir = randint(1, n//2)）")
     ap.add_argument("--only", default=None, help="逗号分隔的策略名")
+    ap.add_argument(
+        "--scan-layout",
+        default=None,
+        choices=["polygon", "axial"],
+        help="矩阵策略的发现层布局（仅对 matrix-dir 生效）：axial=朝向完备三角网格",
+    )
     ap.add_argument("--quiet", action="store_true", help="只打印汇总表")
     args = ap.parse_args()
 
@@ -146,7 +165,8 @@ def main() -> int:
         rows: list[dict] = []
         for seed in seeds:
             row = run_one(seed, which, directional=directional,
-                          n_directional=args.n_directional)
+                          n_directional=args.n_directional,
+                          scan_layout=args.scan_layout)
             rows.append(row)
             if not args.quiet:
                 print(
