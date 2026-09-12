@@ -147,6 +147,16 @@ class MatrixParams:
     #: 完备性兜底：还有"一次都没收到过"的频道时，把契约布局重扫一遍。
     #: 这是题目硬要求"确保所有干扰源被清除"的确定性保障，默认开。
     verify_sweep: bool = True
+    #: 目标排序：False = 纯最近邻（默认）；True = 最近邻 + 一步前瞻
+    #: （代价 = 到候选的距离 + 从候选到"其余目标中最近一个"的距离）。
+    #:
+    #: **实测否决了这个想法**（15 seed，omni）：一步前瞻为了让"下一跳更短"，
+    #: 会优先扎进彼此靠近的源簇，结果在簇之间反复横穿 ——
+    #: 路程 17 117m → 19 819m（+15.8%），avg 356.7 → 367.2s，vt 4260 → 4798s。
+    #: 定向场景基本持平（比例 0.9624 → 0.9609）。故默认关闭，仅作消融对照保留。
+    #: 理论上界：拿真值位置做 2-opt 局部搜索，相对最近邻也只能再省 4.5%
+    #: （均值 9042m → 8638m），说明**目标排序这条线已经没什么空间了**。
+    two_step_lookahead: bool = False
     #: 收尾扫描单次移动的距离上限（米）：避免"死磕一个漏掉的源"把时间吃光
     max_sweep_travel_m: float = 1200.0
     #: 收尾扫描的最大轮数（每轮：成批补读数 -> 逐个清除）。
@@ -553,7 +563,7 @@ class KnowledgeSearchStrategy(Strategy):
         * 本轮已经失败的频道（``self._attempted``）先跳过，只在没有新目标时才回头，
           避免在同一对 (位置, 频道) 上反复打转。
         """
-        best: tuple[float, int] | None = None
+        candidates: list[tuple[int, Point]] = []
         for channel in self.matrix.detected_channels():
             if self.matrix.is_cleared(channel):
                 continue
@@ -565,10 +575,28 @@ class KnowledgeSearchStrategy(Strategy):
             est = belief.centroid
             if est is None:
                 continue
-            cost = state.position.distance_to(est)
+            candidates.append((channel, est))
+        if not candidates:
+            return None
+        if len(candidates) == 1 or not self.params.two_step_lookahead:
+            return min(
+                candidates, key=lambda item: state.position.distance_to(item[1])
+            )[0]
+        # 一步前瞻：代价 = 走到候选的距离 + 从候选到"剩下的目标里最近一个"的距离。
+        # 纯最近邻容易先扎进一个孤立的源，之后再从那里横穿到另一头；
+        # 前瞻能提前看出"这个源顺路/不顺路"，代价是 O(n²) 的纯几何距离计算
+        # （n ≤ 16，可忽略）。
+        best: tuple[float, int] | None = None
+        for channel, est in candidates:
+            first = state.position.distance_to(est)
+            second = min(
+                (est.distance_to(other) for other_ch, other in candidates if other_ch != channel),
+                default=0.0,
+            )
+            cost = first + second
             if best is None or cost < best[0]:
                 best = (cost, channel)
-        return None if best is None else best[1]
+        return best[1]
 
     def _localize_and_clear(
         self, client: SimulatorClient, state: DogState, channel: int
