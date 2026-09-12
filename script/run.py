@@ -38,7 +38,7 @@ from mathmodel2026b.logging_utils import default_log_root  # noqa: E402
 from mathmodel2026b.runner import RunConfig, run_once  # noqa: E402
 from mathmodel2026b.strategy import Q3Params  # noqa: E402
 
-STRATEGY_CHOICES = ("q3", "matrix")
+STRATEGY_CHOICES = ("q3", "matrix", "paper-q4")
 
 #: 离线 mock 用的占位队号。**不要在这里写死真实队号**——平台公告明确要求
 #: 提交代码时隐去队号，改为命令行参数/配置文件提供。
@@ -95,7 +95,12 @@ def apply_param_overrides(params: Any, overrides: list[str]) -> Any:
 
 
 def build_strategy_params(strategy: str, directional: bool, overrides: list[str]) -> Any:
-    """构造策略参数对象（``q3`` 或 ``matrix``）。"""
+    """构造策略参数对象（``q3`` / ``matrix`` / ``paper-q4``）。
+
+    ``paper-q4`` 的内核自带全部几何与调度参数，框架侧只用到
+    :class:`Q3Params` 里的 ``max_wall_time_s``（适配器的墙钟安全阀）与
+    ``max_virtual_time_s``，因此复用默认 :class:`Q3Params`。
+    """
     if strategy == "matrix":
         from mathmodel2026b.strategy_matrix import MatrixParams
 
@@ -112,6 +117,12 @@ def make_strategy_factory(strategy: str, directional: bool):
 
         cls = Q4Strategy if directional else KnowledgeSearchStrategy
         return cls
+    if strategy == "paper-q4":
+        # 队友论文内核的适配器（冻结内核见 ``paper_q4/``，勿就地修改）。
+        # 该内核只解问题4（全向+定向混合），必须配 ``--directional`` 使用。
+        from mathmodel2026b.strategy_q4 import Q4Strategy as PaperQ4Strategy
+
+        return PaperQ4Strategy
     from mathmodel2026b.strategy import Q3Strategy
 
     return Q3Strategy
@@ -124,7 +135,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--strategy",
         choices=STRATEGY_CHOICES,
         default="q3",
-        help="q3=旧 Q3Strategy（兼容默认）；matrix=知识矩阵 KnowledgeSearchStrategy",
+        help=(
+            "q3=旧 Q3Strategy（兼容默认）；matrix=知识矩阵 KnowledgeSearchStrategy；"
+            "paper-q4=队友论文 Q4 内核（需配 --directional）"
+        ),
     )
     parser.add_argument("--robot-id", default=None, help="默认取 login-jammers 配置里的队号")
     parser.add_argument("--login-jammers", default=None, help="login-jammers 仓库根目录")
