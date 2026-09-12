@@ -310,11 +310,17 @@ python3 script/run_practice_online.py --strategy matrix --seed 11 --report logs/
 | 检测次数 | 144 / 144 | 130 / 130 |
 | 程序墙钟 | 0.46 s / 0.46 s | 1.41 s / 1.54 s |
 
-结论：矩阵策略的 **live 代码路径与本地 mock 逐项一致**（同一份 `KnowledgeSearchStrategy` +
-同一 seed 的案例），seed 11 上相对 main 的旧策略在虚拟时间、平均定位清除时间和检测次数
-上均更优；30 seed 的总体中位数见 §7（旧策略在总路程/总时间上仍略好，矩阵策略的优势是
-完备性证书、负例利用和检测次数）。因此满足"线上演练符合 mock → 可合并"的判据；
-正式测试前仍需在官方模拟器上复测。
+结论：矩阵策略的 **live 代码路径与本地 mock 在上表指标上一致**（同一份
+`KnowledgeSearchStrategy` + 同一 seed 的案例），seed 11 上相对 main 的旧策略在虚拟时间、
+平均定位清除时间和检测次数上均更优；30 seed 的总体中位数见 §7（旧策略在总路程/总时间上
+仍略好，矩阵策略的优势是完备性证书、负例利用和检测次数）。因此满足"线上演练符合 mock
+→ 可合并"的判据；正式测试前仍需在官方模拟器上复测。
+
+> 口径提醒：`move_distance_m` 没有放进上表。`run_once` 在 mock 模式取
+> `world.summary()` 的权威距离，在 live 模式只能取策略侧 `DogState.move_distance_m`
+> （按 `_move` 路径点逐段累加）。mock world 的移动时间按两次带位置动作之间的直线距离计，
+> 因此矩阵策略在 live 报告中的 `move_distance_m` 会高于 mock 的 world 值；本题计分口径
+> `virtual_time_s` 由服务器返回，二者是一致的。
 
 ## 7.5 决策逻辑的算法定性（"贪心？n-opt？贝叶斯？"）
 
