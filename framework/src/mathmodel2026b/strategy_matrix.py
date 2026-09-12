@@ -1,4 +1,4 @@
-"""矩阵驱动的搜索策略：知识矩阵 + 覆盖证书 + 解析式逼近（问题3/问题4统一）。
+r"""矩阵驱动的搜索策略：知识矩阵 + 覆盖证书 + 解析式逼近（问题3/问题4统一）。
 
 与旧 :class:`mathmodel2026b.strategy.Q3Strategy` 的区别（论文里要写清楚）
 --------------------------------------------------------------------
@@ -26,9 +26,9 @@
 1. 一次示向度读数给出以检测点为中心的 ±1° 锥；多个锥求交 + "距离 ≤ R_max" 的圆约束，
    得到必定含真值的凸可行域 :math:`P_c`（沿用 ``geometry.feasible_region``）。
 2. 可行域最小包围圆半径 ≤ 20m ⇒ 瞄准圆心 ``/clear`` **必定命中**（光学作用距离）。
-3. 负例 ``not_find`` 在 p 意味着 :math:`R < |p-\\text{源}|`；由于源 ∈ :math:`P_c`，
-   取 :math:`\\hat R=\\min_p d(p,P_c)` 作为 R 的在线上界估计（见 ``coverage.estimate_radius``）。
-   :math:`\\hat R` 越大，"覆盖整个区域"需要的停点越少，这就是负例的收益来源。
+3. 负例 ``not_find`` 在 p 意味着 :math:`R < |p-源|`；由于源 ∈ :math:`P_c`，
+   取 :math:`\R_hat=\min_p d(p,P_c)` 作为 R 的在线上界估计（见 ``coverage.estimate_radius``）。
+   :math:`\R_hat` 越大，"覆盖整个区域"需要的停点越少，这就是负例的收益来源。
 4. 逼近段：第一读数给出方向，沿该方向前进到剩余距离的 0.6 倍处再读数，
    角分离 ≈ 0.4·‖PQ‖/d，横向不确定度 ≈ 0.6·d·tan1° —— d ≤ 1100m 时 ≤ 11.5m，
    两读数即可满足 20m 清除判据（解析推导见 docs/knowledge-matrix.md）。
@@ -312,10 +312,10 @@ class KnowledgeSearchStrategy(Strategy):
         return [center] + ring
 
     def _channels_to_probe(self, stop: Point) -> list[int]:
-        """本停点该测哪些频道 —— 知识矩阵剪枝的落点。
+        r"""本停点该测哪些频道 —— 知识矩阵剪枝的落点。
 
         一个频道在这个停点"值得测"，当且仅当它与该停点的覆盖圆盘还有交集，
-        即 :math:`d(\\text{stop}, P_c) \\le \\hat R_c - \\text{margin}`。
+        即 :math:`d({stop}, P_c) \<= \R_hat_c - {margin}`。
         用连续凸可行域判定（不需要格子），对"已收到信号"的频道极其便宜。
         """
         p = self.params
@@ -647,15 +647,15 @@ class KnowledgeSearchStrategy(Strategy):
             self._clear_at(client, state, est, channel, reason="last-resort")
 
     def _approach_target(self, state: DogState, channel: int, step: int) -> Point | None:
-        """下一个逼近点（可行域大走"弦"，可行域小走"最近点"）。
+        r"""下一个逼近点（可行域大走"弦"，可行域小走"最近点"）。
 
         两种模式，按可行域最小包围圆半径 :math:`\rho` 自动切换：
 
         * :math:`\rho` 较大（> 60m）——**弦模式**：朝估计点一次走完剩余距离的
           ``1-f`` 比例（默认 f=0.6），把"走过去"和"取第二次读数"合并成一步。
           解析上，走到剩余距离的 f 倍处再读数时，角分离
-          :math:`L\approx(1-f)|PQ|/d`，横向不确定度
-          :math:`\approx f\,d\tan 1^\circ`，d≤1100m 时约 11.5m < 20m。
+          :math:`L~(1-f)|PQ|/d`，横向不确定度
+          :math:`~ fd\tan 1^deg`，d≤1100m 时约 11.5m < 20m。
         * :math:`\rho` 较小——**最近点模式**：直接走到可行域（保证含真值的凸多边
           形）上离当前位置最近的点。"清除点与真值距离 ≤ ρ"就是 20m 判据的来源。
           旧实现在这一档会走过头再折回（MEC≤20m 却清不到、清失败后又走远），

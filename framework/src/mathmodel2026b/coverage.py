@@ -12,33 +12,33 @@
 
 三条核心公式
 ------------
-1. **有效接收半径 R 的在线夹逼**——负例的唯一用途
+1. **有效接收半径 R 的在线夹逼** —— 负例的唯一用途
 
    一个 ``not_find`` 观测在点 p，若该点本可以测到源，则必有 ``R < |p - 源|``。
-   源位置未知但落在可行域 :math:`P_c` 内，取可行域内离 p 最近的点做保守估计：
+   源位置未知但落在可行域 P_c 内，取可行域内离 p 最近的点做保守估计::
 
-   .. math:: \\hat R=\\mathrm{clip}\\!\\left(\\min_{p\\in \\text{not\\_find}} d(p,P_c),\\;R_{\\min},\\;R_{\\max}\\right)
+       R_hat = clip( min_{p in not_find} d(p, P_c),  R_min=1000,  R_max=1500 )
 
-   没有负例时只能退回 :math:`R_{\\min}=1000` m —— 这正是旧实现 7 点覆盖半径必须
-   ≤1000m 的原因。有了负例，:math:`\\hat R` 常常能抬到 1200~1500m，
+   没有负例时只能退回 ``R_min = 1000m`` —— 这正是旧实现 7 点覆盖半径必须
+   ≤1000 m 的原因。有了负例，``R_hat`` 常常能抬到 1200~1500 m，
    覆盖同一片区域需要的停点就少得多。
 
 2. **覆盖判据（保守、可复算）**
 
-   规划时假设源可能落在 :math:`P_c` 内任意一点。"停点集合 S 必定发现该频道"
-   等价于 :math:`P_c` 被半径 :math:`\\hat R` 的圆盘族覆盖。本模块用**栅格化**实现：
+   规划时假设源可能落在 P_c 内任意一点。"停点集合 S 必定发现该频道"等价于
+   "P_c 被半径 ``R_hat`` 的圆盘族覆盖"。本模块用**栅格化**实现：
 
-   * 把 :math:`P_c` 离散成 60m 栅格（在位掩码上做集合运算，快）
-   * 一个格子被停点 s 覆盖，当且仅当该格**四个角**到 s 的距离都 ≤
-     :attr:`CoverageGrid.radius_m`（角点包含 ⇒ 整格包含，凸性保证）；
-     这使判据对连续区域是**严格保守**的
-   * :math:`\\hat R` 上再留 :data:`RADIUS_SAFETY_MARGIN_M` 的余量
+   * 把 P_c 离散成 60m 栅格（在位掩码上做集合运算，快）；
+   * 一个格子被停点 s 覆盖，当且仅当该格**四个角**到 s 的距离都 ≤ 计划半径
+     （角点包含 ⇒ 整格包含，凸性保证），因此判据对连续区域是**严格保守**的；
+   * ``R_hat`` 上再留 :data:`RADIUS_SAFETY_MARGIN_M` 的余量。
 
 3. **下一个停点 = 单位路程的最大"新增确认面积"**
 
-   .. math:: s^\\star=\\arg\\max_s \\frac{\\sum_c w_c\\,|U_c\\cap D(s,\\hat R)|}{\\text{travel}(s)}
+   记 U_c 为频道 c 尚未确认的区域，w_c 为频道权重（:func:`channel_weight`）：:
 
-   其中 :math:`U_c` 是频道 c 尚未被确认的区域，:math:`w_c` 见 :func:`channel_weight`。
+       s* = argmax_s  sum_c  w_c * area(U_c ∩ D(s, R_hat))  /  travel(s)
+
    "已经确认过的面积"收益为 0，所以不会为了重复确认白跑路。
 """
 
@@ -378,7 +378,7 @@ def build_beliefs(
 ) -> dict[int, Belief]:
     """从知识矩阵重建每个频道的信息（正例 → 可行域；负例 → R 的上界）。
 
-    ``directional=True``（问题4）时 :math:`\hat R` 改用**乐观**上界：
+    ``directional=True``（问题4）时 :math:`R_hat` 改用**乐观**上界：
     定向源的"收不到"可能只是背对着，因此负例只能给出很弱的下界。
     覆盖/剪枝判据必须按"源的有效接收半径可能大到 1500m"来规划 ——
     用保守的 1000m 会把"8 个停点全在 1000m 外"的源误判成"已确认"。
@@ -845,14 +845,14 @@ class CoverageTracker:
 
     # -- 规划 -----------------------------------------------------------
     def candidate_lattice(self, spacing_m: float | None = None) -> list[Point]:
-        """三角格候选停点（覆盖整个目标区域，含边界外一圈）。
+        r"""三角格候选停点（覆盖整个目标区域，含边界外一圈）。
 
         用**三角格**（hexagonal lattice）而不是方阵：同样间距下三角格的覆盖半径
-        只有方阵的 :math:`1/\\sqrt2` 量级，因此"候选集合本身"就是一个合法覆盖，
-        贪心集合覆盖才有终止保证。间距取 :math:`1.70\\hat R` 时，
-        覆盖半径 :math:`\\approx 0.98\\hat R < \\hat R`。
+        只有方阵的 :math:`1/\sqrt2` 量级，因此"候选集合本身"就是一个合法覆盖，
+        贪心集合覆盖才有终止保证。间距取 :math:`1.70\R_hat` 时，
+        覆盖半径 :math:`\~ 0.98\R_hat < \R_hat`。
 
-        候选点数量在 :math:`|\\text{区域}|/\\text{间距}^2` 量级（数百个），
+        候选点数量在 :math:`|{区域}|/{间距}^2` 量级（数百个），
         每个候选打分的成本是"与各频道未确认掩码求交"，整体在几十毫秒内。
         """
         spacing = spacing_m or self.grid.cell_m
@@ -875,8 +875,8 @@ class CoverageTracker:
         self._candidate_cache[spacing] = out
         return out
 
-    #: 覆盖用候选格点间距与 :math:`\hat R` 的比值。三角格覆盖定理给出
-    #: :math:`\sqrt3\,R \approx 1.732R` 是"保证覆盖"的最大间距；
+    #: 覆盖用候选格点间距与 :math:`R_hat` 的比值。三角格覆盖定理给出
+    #: :math:`sqrt3R ~ 1.732R` 是"保证覆盖"的最大间距；
     #: 这里取 1.70R 留一点余量，使"候选格点集合本身"就是合法覆盖。
     COVER_LATTICE_RATIO: float = 1.70
     #: 贪心集合覆盖的"收益容忍度"：新增面积达到最优的 80% 就算合格，
@@ -891,12 +891,12 @@ class CoverageTracker:
         * :meth:`plan` 用"新增确认面积 / 路程"。这天然偏好近处的小收益，
           走到最后会退化成"贴着未确认区域边缘打转"——实测 18 个停点之后
           缺口还有一半，机器狗在离原点 1700m 的边界带绕圈；
-        * 本方法直接用**贪心集合覆盖**：候选点间距取 :math:`1.70\hat R`
+        * 本方法直接用**贪心集合覆盖**：候选点间距取 :math:`1.70R_hat`
           （三角格定理保证这个间距的格点集合本身就是覆盖），每次挑"能盖住
           最多未确认格"的点，路程只作为并列打破项。
 
         因为候选格点集合本身是覆盖，这条贪心一定在
-        :math:`O(\text{面积}/\hat R^2)` 步内把缺口清零，不会无限打转。
+        :math:`O({面积}/R_hat^2)` 步内把缺口清零，不会无限打转。
         """
         if not self.states:
             return None
@@ -1111,9 +1111,9 @@ def invisible_mask(
 
     .. math::
 
-        |S-p| \le R_{	ext{test}}
-        \quad	ext{且}\quad
-        orall apex:\; ngle(\mathrm{dir}(S	o p),\mathrm{dir}(S	o apex)) \le 90^\circ
+        |S-p| <= R_{	ext{test}}
+        	ext{且}
+        orall apex: ngle({dir}(S	o p),{dir}(S	o apex)) <= 90^deg
 
     那么"源在 S"这个假设下，p 处**必定**能收到信号（距离够近、方向也朝着它）。
     既然 p 上记的是 ``not_find``，S 处就不可能是源，可以删掉。
@@ -1231,16 +1231,16 @@ def hidden_mask(
 
     .. math::
 
-        \forall p \in \text{已测停点}:\quad
-        |S-p| > R_{\min}
-        \;\;\text{或}\;\;
-        \exists apex:\; \angle(\mathrm{dir}(S\to p),\mathrm{dir}(S\to apex)) > 90^\circ
+        for all p \in {已测停点}:
+        |S-p| > R_{min}
+        {或}
+        \exists apex: angle({dir}(S-> p),{dir}(S-> apex)) > 90^deg
 
     含义：每个停点要么离得太远（收不到），要么方向与已确认能看到的方向相反
     （源完全可以把锥背对它）。这样的位置就是**锥盲区** —— 无论在这几个停点上
     怎么加大发射功率式的重扫都没用，必须换一个"能同时看到这些停点"的位置去测。
 
-    实现上先把候选位置缩到"离某个停点不超过 :math:`R_{\min}`"的格
+    实现上先把候选位置缩到"离某个停点不超过 :math:`R_{min}`"的格
     （再远就是纯距离问题），再逐个停点做半平面判定，成本可忽略。
     """
     mask = grid.mask_inside_arena()

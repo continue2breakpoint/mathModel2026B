@@ -1,4 +1,4 @@
-"""实时知识矩阵：``channel × path`` 的观测台账（dataType.txt 的可执行版本）。
+r"""实时知识矩阵：``channel × path`` 的观测台账（dataType.txt 的可执行版本）。
 
 设计来源
 --------
