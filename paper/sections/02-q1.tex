@@ -1,0 +1,53 @@
+\section{问题一：交会定位区域及其直径}
+\subsection{示向约束的半平面表示}
+令 $u_i^-=e(\theta_i-\eps)$、$u_i^+=e(\theta_i+\eps)$。目标位置满足
+\begin{equation}
+W_i=\{X:u_i^-\times(X-S_i)\ge0,\quad u_i^+\times(X-S_i)\le0\}.
+\label{eq:wedge}
+\end{equation}
+该形式同时保留“位于射线前方”的信息，避免把示向线误当成无方向直线，也不受 $0^\circ$ 与 $360^\circ$ 跨界影响。
+
+仅使用题目交会信息时，定位区域为 $P=\bigcap_iW_i$。若其非空有界，则为凸多边形；若观测方向接近或约束不足，则可能无界，不能强行给出有限直径。结合已知目标圆域与有效接收半径上界，可进一步构造
+\begin{equation}
+K=\Omega\cap\bigcap_i\bigl(W_i\cap\disk(S_i,b)\bigr).
+\label{eq:region}
+\end{equation}
+这是含圆弧边界的凸集。计算时将每个圆盘换为外接正 $m$ 边形，得到 $K\subseteq\widehat K$；因此所得直径是精确集合直径的上界。题目给定多边形的直径与这一外包络直径应分别标注。
+
+\subsection{区域构造和直径算法}
+若多边形顶点已知，直接计算其凸包后求直径即可。若输入为示向度，按式\eqref{eq:wedge}进行半平面求交；需要圆域约束时，从目标圆的外接多边形开始逐次裁剪。设保留半平面为 $f(X)=n\cdot X+c\ge0$，边端点 $A,B$ 分居两侧，则交点为
+\begin{equation}
+I=A+\frac{f(A)}{f(A)-f(B)}(B-A).
+\label{eq:clip}
+\end{equation}
+顺次保留域内顶点并补充交点，即得到下一轮多边形。
+
+设最终顶点按逆时针顺序为 $V_1,\ldots,V_m$，则
+\begin{equation}
+D(P)=\max_{1\le i,j\le m}\norm{V_i-V_j}.
+\label{eq:diameter}
+\end{equation}
+证明见附录。枚举顶点对的时间复杂度为 $O(m^2)$，便于核验；凸多边形可用旋转卡壳枚举对踵点，将该步骤降为 $O(m)$。对每条边推进使三角形面积最大的对侧顶点，在面积相等时同时检查相邻对踵点，避免漏掉平行边情形。一般半平面求交可在排序后用双端队列完成，总体复杂度 $O(n\log n)$；当前逐边裁剪适合边数较少的在线更新。
+
+空集应报告约束不一致；单点直径为零；线段直径为端点距离；无界区域直径为无穷。几何程序把少于三个顶点直接判空的实现方式，需要在最终版本中与这些退化情况分开处理。
+
+\subsection{直径圆不一定覆盖定位区域}
+取一对直径端点 $A,B$，令 $M=(A+B)/2$。其直径圆覆盖 $P$ 当且仅当
+\begin{equation}
+\max_k(V_k-A)\cdot(V_k-B)\le0,
+\label{eq:diametercircle}
+\end{equation}
+因为 $(X-A)\cdot(X-B)=\norm{X-M}^2-D^2/4$，且圆盘是凸集，检查全部顶点即可。
+
+边长为 $D$ 的等边三角形构成反例：最小包围圆半径为 $D/\sqrt3>D/2$，任何直径为 $D$ 的圆都无法覆盖它。对于有限次窄楔形交会，也不能据此假定总有覆盖性；可在三角形各边延长线上放置足够远的楔形顶点，使一条边界沿该边，另一条边界在三角形外侧，三组楔形即可保留这个反例。
+
+一般非空紧平面集满足
+\begin{equation}
+\frac{D(K)}2\le r_*(K)\le\frac{D(K)}{\sqrt3},\qquad
+\text{直径圆可覆盖}\ \Longleftrightarrow\ r_*(K)=\frac{D(K)}2.
+\label{eq:jung}
+\end{equation}
+最小包围圆由两个对径支撑点或三个非共线支撑点确定。可用随机增量算法计算，期望时间为 $O(m)$；最后逐顶点核验，并取实际最大顶点距离作为认证半径。
+
+因此，$D\le40\,\mathrm m$ 只是可用一个20米圆覆盖的必要条件，$D\le20\sqrt3\,\mathrm m$ 是充分条件；直接计算 $r_*\le20\,\mathrm m$ 才是准确判据。若使用外包络 $\widehat K$，该判据仍然充分，但可能偏保守。
+\placeholder{直径圆与最小包围圆的区别}{并列绘制一个平行四边形与一个等边三角形。标出直径端点、直径圆圆心、半径；三角形第三顶点落在直径圆外，再画其外接圆。注明示意图不按实际距离比例。}

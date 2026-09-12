@@ -1,0 +1,107 @@
+\section{问题二：第二检测点的选择}
+\subsection{第一读数给出的信息}
+已有检测点 $S_1$ 和示向度 $\theta_1$，定义
+\begin{equation}
+A_1=\Omega\cap W_1\cap\disk(S_1,b),\qquad
+S_2=S_1+x e(\theta_1)+y e_\perp(\theta_1).
+\end{equation}
+严格的示向反馈还排除 $\norm{G-S_1}\le5$ 的部分。为保持凸性，稳健几何模型可保留这一小区域作为保守外包络；概率计算则应排除它，或明确说明作了近似。
+
+第一次接收只说明 $d_1=\norm{G-S_1}\le\rho$，并不能推断 $d_1\ge1000$。由于两次检测针对同一源，第二次仍使用同一个未知的 $\rho$。不能将两次接收事件的概率直接相乘。
+
+\subsection{保证接收区域与候选区域}
+给定可能位置 $G$，第一次接收后半径的下界提升为 $\max(a,d_1)$。因而下式给出不依赖概率分布的稳健条件：
+\begin{equation}
+\mathcal V(A_1)=\left\{S:\sup_{G\in A_1}
+\bigl[\norm{S-G}-\max(a,\norm{G-S_1})\bigr]\le0\right\}.
+\label{eq:robust}
+\end{equation}
+在此区域内，第二次必定得到示向或近距反馈。若返回近距反馈，即可直接清除；“保证接收”不意味着一定返回示向角。
+
+为得到显式区域，暂用未经目标圆裁剪的完整扇形外包络。令
+\begin{equation}
+\mathcal V_0=\disk(S_1,a)\cap
+\disk\bigl(S_1+a e(\theta_1-\eps),a\bigr)\cap
+\disk\bigl(S_1+a e(\theta_1+\eps),a\bigr).
+\label{eq:lens}
+\end{equation}
+附录证明 $\mathcal V_0$ 保证第二次接收；对包含 $r=0$ 的完整扇形模型，它恰为保证区域。考虑目标圆裁剪、$d_1>5$ 后，式\eqref{eq:robust}的区域可能更大，式\eqref{eq:lens}仍是安全的内近似。特别地，三个圆的圆心使用 $a=1000$，不是 $b=1500$。
+
+仅保证信号还不够。若两个检测点与目标近乎共线，交会区域仍会很长。给定名义目标 $G_*=S_1+\mu e(\theta_1)$，要求名义交会角满足 $30^\circ\le\alpha_*\le150^\circ$，可写为
+\begin{equation}
+|x-\mu|\le\sqrt3|y|,\qquad y\ne0.
+\end{equation}
+因此可用的显式候选区域是
+\begin{equation}
+\boxed{\mathcal C=\mathcal V_0\cap
+\{S_1+x e(\theta_1)+y e_\perp(\theta_1):|x-\mu|\le\sqrt3|y|,\ y\ne0\}.}
+\label{eq:candidates}
+\end{equation}
+若希望机器狗始终留在目标圆内，再与 $\Omega$ 相交；题面并未要求这一额外限制。此角度筛选只针对名义点，不保证所有真实位置都有同样交会角，最终仍应评价完整可行域。
+
+\subsection{为何侧向补测有效}
+在名义真值附近令位置扰动为 $\Delta$，记 $n_i=e_\perp(\beta_i)$、$d_i=\norm{G-S_i}$，其中 $\beta_i$ 为真实方位角。测向误差的一阶关系为
+\begin{equation}
+\delta_i\simeq\frac{n_i^\mathsf T\Delta}{d_i}.
+\end{equation}
+两条局部误差带的半宽近似 $h_i=d_i\tan\eps$。若其中心线夹角为 $\alpha$，交会平行四边形的面积及直径近似为
+\begin{align}
+A_{\rm lin}&=\frac{4h_1h_2}{|\sin\alpha|},\\
+D_{\rm lin}&=\frac{2\sqrt{h_1^2+h_2^2+2h_1h_2|\cos\alpha|}}{|\sin\alpha|}.
+\label{eq:linear-diameter}
+\end{align}
+这解释了缩短测距和增大横向基线的作用。该式仅用于分析局部趋势；实际区域受楔形扩张、圆域和距离上界裁剪，必须按问题一计算。
+
+\subsection{附加先验下的候选点排序}
+以下概率模型仅用于选择效率较高的点。设 $G$ 在 $\Omega$ 内等面积均匀，$\rho\sim U[a,b]$，角误差为独立均匀分布。第一点若为圆心，第一次接收后的径向权重为
+\begin{equation}
+K_1(r)=(b-\max(a,r))_+,\quad
+K_{12}(r,d_2)=(b-\max(a,r,d_2))_+.
+\label{eq:weights}
+\end{equation}
+取局部真方向偏差 $\phi\in[-\eps,\eps]$，极坐标面积元为 $r\,\mathrm dr\,\mathrm d\phi$。在忽略5米小圆的参考模型中，后验密度为
+\begin{equation}
+p(r,\phi\mid\theta_1)=\frac{rK_1(r)}{2\eps I_1},\qquad
+I_1=\int_0^b rK_1(r)\,\mathrm dr.
+\end{equation}
+因此
+\begin{equation}
+\mu=\frac{\int_0^b r^2K_1(r)\,\mathrm dr}{I_1}
+=\frac{b^4-a^4}{2(b^3-a^3)}\approx855.263\,\mathrm m.
+\label{eq:mu}
+\end{equation}
+严格按第一反馈为示向时，积分下限改为5，均值约为 $855.277\,\mathrm m$，对米级选点影响很小。
+
+对候选点 $S$，令 $d_2(r,\phi)=\norm{S-S_1-r e(\theta_1+\phi)}$，第二次接收概率为
+\begin{equation}
+p_{\rm rec}(S)=
+\frac{\displaystyle\int_{-\eps}^{\eps}\int_0^b rK_{12}(r,d_2)\,\mathrm dr\,\mathrm d\phi}
+{2\eps I_1}.
+\label{eq:prob}
+\end{equation}
+若要计算第二次确实得到示向的概率，还需在分子乘以 $\ind_{d_2>5}$；近距部分单独记为直接清除事件。一般第一点不在圆心时，所有积分需增加 $S_1+r e(\theta_1+\phi)\in\Omega$ 的限制，$\mu$ 应重新计算，不能直接搬用855米。
+
+对每个可能的第二示向 $\theta_2$，构造
+\begin{equation}
+K_2(S,\theta_2)=A_1\cap W(S,\theta_2)\cap\disk(S,b),
+\end{equation}
+并计算 $r_*(K_2)$。可以最小化成功接收后的平均包围半径，或最大化一次即可认证清除的概率。对于接收可能失败的点，使用
+\begin{equation}
+J(S)=\frac{\norm{S-S_1}}v+5+\lambda_f(1-p_{\rm rec}(S))
++\lambda_r\,\mathbb E[r_*(K_2)\mid\text{示向}],
+\label{eq:q2cost}
+\end{equation}
+其中 $\lambda_f$ 表示失败后的预计补救时间，$\lambda_r$ 将位置不确定性换算成后续代价。更完整的评价应直接计算后续移动与清除成本，而不是把所有指标强行合并为无量纲分数。在 $\mathcal V_0$ 内无需失败惩罚，可比较包围半径、一次清除率与移动距离的权衡。
+
+\subsection{可执行策略与边界说明}
+第一点在圆心、采用上述参考先验时，取
+\begin{equation}
+S_2=S_1+850 e(\theta_1)\pm520 e_\perp(\theta_1)
+\label{eq:q2point}
+\end{equation}
+作为初始候选，两种符号分别对应示向线两侧。该点到三个保证圆圆心的最大距离约为 $996.44\,\mathrm m$，具有约 $3.56\,\mathrm m$ 的接收裕量；名义交会角接近直角。它是可复核的参考点，不是普适最优解。
+
+实施时先构造 $A_1$，筛选 $\mathcal C$ 中的网格点，按接收、近距、示向三个分支求积，保留若干效率不同的点，再局部加密网格。第二次返回示向后更新集合；若 $r_*\le20$ 则前往圆心清除，否则继续补测。该流程不保证两次测向就一定能达到20米精度。
+
+另外，$\operatorname{dist}(S,A_1)>b$ 才是“必然无信号”的充分判据；等于 $b$ 时仍可能在边界上接收。连续先验下该边界事件可能概率为零，但不能因此将其改写为确定性不可能。
+\placeholder{第二检测点候选区域}{局部横轴为第一示向方向，绘制半径1500米、张角2度的源位置扇形；叠加三个半径1000米圆的公共区域，再以交会角条件截出上下两块候选区域。标注 $(850,520)$、$(850,-520)$ 与第一点。另一小图展示第一点靠近圆域边界时，裁剪导致两侧候选不对称。}

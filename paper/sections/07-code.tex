@@ -1,0 +1,28 @@
+\section{核心代码与支撑材料说明}
+\subsection{代码文件目录}
+本附录仅陈列前三问相关的核心算法文件。论文目录下的 \texttt{code/} 保存了编写时的源码快照，路径与哈希见 \texttt{code/MANIFEST.md}；完整运行仍需仓库框架与依赖。表中的“已有”表示仓库已有实现，不表示已经实现本文全部改进。
+\begin{longtable}{>{\raggedright\arraybackslash\scriptsize}p{5.1cm}p{8.9cm}}
+\toprule
+文件（省略公共前缀）&作用及与论文关系\\\midrule\endhead
+\texttt{geometry.py}&半平面裁剪、圆盘外包络、顶点直径、最小包围圆；通用覆盖公式与退化处理需要按本文校正。\\
+\texttt{cpp/geom.hpp}\newline\texttt{bindings.cpp}&C++几何内核及Python接口，用于直径、最小包围圆与求积加速。\\
+\texttt{q2\_second\_point\_quadrature.py}&第二检测点参考先验的数值求积；需补齐近距分支、一般第一点及任意候选的第二接收圆约束。\\
+\texttt{q2\_zones.py}&第二检测点区域构造与接收概率计算，使用时区分外包络近似和严格区域。\\
+\texttt{strategy.py}&问题三基础扫描、目标调度、局部补测和清除；需接入本文有限兜底和修正夹角评价。\\
+\texttt{coverage.py}\newline\texttt{strategy\_matrix.py}&联合状态、覆盖及调度扩展；仅作为第三问改进的实现参考，其第四问代码不构成本文第四问解法。\\
+\texttt{verify\_formulas.py}&本次新增的离线公式复核程序；检验覆盖极值、候选点裕量、后验均值和兜底单元尺度。\\
+\bottomrule
+\end{longtable}
+现有源码中的注释不能代替证明，例如“凸区域半径等于直径一半”“确定性求积即精确积分”“最近邻加2-opt所得路径为下界”等表述均不采用。
+
+\subsection{半平面裁剪与直径计算核心摘录}
+下列内容从 \texttt{geometry.py} 提取，省去注释与类型声明以缩短篇幅；完整文件见支撑材料。示向角在现有接口中为度，进入三角函数前统一转弧度。
+\lstinputlisting[language=Python]{code/excerpt_geometry.py}
+
+\subsection{最小包围圆核心摘录}
+下列为已有随机增量主循环，依赖完整文件中的两点圆、三点圆和包含判定函数。最终应补上近共线处理与全顶点半径复核，本文认证条件不依赖未经复核的浮点半径。
+\lstinputlisting[language=Python]{code/excerpt_circle.py}
+
+\subsection{有限兜底网格的参考实现}
+此函数只生成清除候选点，不向模拟器发送动作。它是本文新增的数学方案原型，尚未接入策略或做官方测试。执行时按返回顺序尝试同一频道，成功后立即停止。
+\lstinputlisting[language=Python]{code/fallback_grid.py}

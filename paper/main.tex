@@ -1,0 +1,58 @@
+% !TeX program = lualatex
+\documentclass[a4paper,12pt]{article}
+\usepackage[margin=2.5cm,headheight=16pt]{geometry}
+\usepackage{fontspec}
+\usepackage{babel}
+\babelprovide[import,main]{chinese}
+\babelfont{rm}{Noto Serif CJK SC}
+\babelfont{sf}{Noto Sans CJK SC}
+\babelfont{tt}{DejaVu Sans Mono}
+\usepackage{amsmath,amssymb,amsthm,booktabs,longtable,array}
+\usepackage{xcolor,graphicx,fancyhdr,fancyvrb}
+\usepackage[unicode,hidelinks]{hyperref}
+\usepackage{listings}
+\linespread{1.22}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.25em}
+\setlength{\emergencystretch}{3em}
+\pagestyle{fancy}\fancyhf{}\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\figurename}{图}\renewcommand{\tablename}{表}
+\renewcommand{\refname}{参考文献}
+\newtheorem{proposition}{命题}[section]
+\renewcommand{\proofname}{证明}
+\newcommand{\R}{\mathbb R}
+\newcommand{\norm}[1]{\left\lVert #1\right\rVert}
+\newcommand{\disk}{\overline B}
+\newcommand{\eps}{\varepsilon}
+\newcommand{\ind}{\mathbf 1}
+\newcommand{\placeholder}[2]{\begin{figure}[htbp]\centering\fbox{\parbox{0.90\linewidth}{\small [#2]}}\caption{#1}\end{figure}}
+\lstset{basicstyle=\ttfamily\scriptsize,breaklines=true,columns=fullflexible,keepspaces=true,showstringspaces=false,frame=single,numbers=left,numberstyle=\tiny,numbersep=5pt}
+\begin{document}
+\begin{center}
+{\LARGE\bfseries 基于有界误差集合估计的\\[0.25em]无线电干扰源定位与清除}\par
+\vspace{1em}{\large\bfseries 摘要}
+\end{center}
+针对未知数量无线电干扰源的自动定位与清除问题，建立“区域覆盖发现—交会集合估计—近距补测—认证清除”的模型。示向误差仅有区间界，故以包含真实位置的可行域作为状态，避免把同地点重复读数视为独立样本。
+
+对问题一，将示向度约束写成两个半平面，利用逐边裁剪构造定位多边形，以顶点对最大距离计算直径，并给出旋转卡壳加速方法。证明直径为 $D$ 的区域不一定能被半径 $D/2$ 的圆覆盖；清除应采用最小包围圆半径不超过 $20\,\mathrm m$ 的判据。
+
+对问题二，利用同一干扰源有效接收半径固定的性质，构造保证再次接收到信号的候选区域，并加入交会角约束。在第一检测点位于圆心、附加均匀先验的参考情形下，给出沿示向线前进约 $850\,\mathrm m$、横移约 $520\,\mathrm m$ 的候选点；一般位置需根据目标圆域重新裁剪和评价。概率仅用于候选点排序，确定性结论不依赖该先验。
+
+对问题三，圆心与半径 $1200\,\mathrm m$ 的正六边形顶点形成七点覆盖，最坏覆盖距离约为 $968.90\,\mathrm m$。在覆盖发现后，按当前位置选择待清除目标，以多次测向缩小区域，达到清除判据后执行光学定位。补充逐频道覆盖证书与有限网格清除兜底，使“未遗漏”与“已清除”具有明确的数学条件。仓库已有的30例本地模拟记录中，基础策略均完成全部清除，单案例每源时间的中位数约为 $332.19\,\mathrm s$；该记录不代表官方测试成绩。第四问解法与正式测试结果预留。
+
+\noindent\textbf{关键词：}有界误差；交会定位；最小包围圆；稳健选点；覆盖搜索
+\clearpage
+\input{sections/01-foundation}
+\input{sections/02-q1}
+\input{sections/03-q2}
+\input{sections/04-q3}
+\input{sections/05-evaluation}
+\begin{thebibliography}{9}
+\bibitem{problem} 2026年高教社杯全国大学生数学建模竞赛B题：无线电干扰源的快速自动定位与清除（题目及附录1--4）.
+\bibitem{protocol} B题附件1：模拟器通信协议与操作说明；附件2：通信示例.
+\end{thebibliography}
+\clearpage\appendix
+\input{sections/06-derivations}
+\input{sections/07-code}
+\end{document}

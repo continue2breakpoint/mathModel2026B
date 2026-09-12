@@ -1,0 +1,126 @@
+\section{几何与概率公式推导}
+\subsection{凸多边形直径在顶点对上取得}
+设 $X=\sum_i\lambda_iV_i$、$Y=\sum_j\mu_jV_j$，其中系数非负且分别和为1。则
+\begin{equation}
+\norm{X-Y}=\left\lVert\sum_{i,j}\lambda_i\mu_j(V_i-V_j)\right\rVert
+\le\sum_{i,j}\lambda_i\mu_j\norm{V_i-V_j}
+\le\max_{i,j}\norm{V_i-V_j}.
+\end{equation}
+反之，顶点属于多边形，最大顶点距离必能取到，故式\eqref{eq:diameter}成立。圆盘是凸集，所以全部顶点在圆内等价于整个凸多边形在圆内。
+
+\subsection{最小包围圆半径与直径的关系}
+包含一对距离为 $D$ 的点需要半径至少 $D/2$。最小包围圆的圆心处于支撑点的凸包内，否则可稍移圆心使所有支撑距离同时减少。在平面上，圆心可由至多三个支撑点的凸组合表示。
+
+两支撑点时，它们为对径点，$r_*=D/2$。三支撑点时，形成包含圆心的三角形，其最大角 $\gamma$ 位于 $[60^\circ,90^\circ]$，由正弦定理最大边长为 $2r_*\sin\gamma\ge\sqrt3r_*$。由于该边不超过 $D$，故 $r_*\le D/\sqrt3$，等边三角形取等号。
+
+三点 $A=(a_x,a_y),B=(b_x,b_y),C=(c_x,c_y)$ 的外接圆心 $U$ 可由
+\begin{equation}
+2\begin{pmatrix}b_x-a_x&b_y-a_y\\c_x-a_x&c_y-a_y\end{pmatrix}U
+=\begin{pmatrix}\norm B^2-\norm A^2\\\norm C^2-\norm A^2\end{pmatrix}
+\end{equation}
+求解。行列式接近零时应改查最远点对，避免除以近零数。求得圆心后，认证半径统一重算为 $\max_i\norm{U-V_i}$。
+
+\subsection{圆盘外包络的误差}
+半径 $r$ 的圆，其外接正 $m$ 边形顶点半径为 $r\sec(\pi/m)$，最大径向外扩为
+\begin{equation}
+\Delta_m=r\bigl(\sec(\pi/m)-1\bigr)
+\simeq\frac{r\pi^2}{2m^2}.
+\end{equation}
+例如 $r=1800,m=96$ 时约为 $0.964\,\mathrm m$。外包络包含真值，故对它认证清除是保守的；但接近20米阈值时可增加边数或局部精确处理圆弧。该径向外扩不能直接作为任意近乎平行交会后的最终直径误差界，交会几何可能放大误差。
+
+\subsection{三圆交保证区域的证明}
+平移旋转后令 $S_1=0,\theta_1=0$，候选点记为向量 $s$，$u_\pm=e(\pm\eps)$。若 $s\in\mathcal V_0$，则
+\begin{equation}
+\norm s\le a,\qquad \norm{s-au_\pm}\le a
+\ \Longrightarrow\ s\cdot u_\pm\ge\frac{\norm s^2}{2a}.
+\end{equation}
+对 $|\phi|\le\eps$，有 $e(\phi)=\lambda u_-+\mu u_+$，其中
+\begin{equation}
+\lambda=\frac{\sin(\eps-\phi)}{\sin(2\eps)},\quad
+\mu=\frac{\sin(\eps+\phi)}{\sin(2\eps)},\quad
+\lambda+\mu=\frac{\cos\phi}{\cos\eps}\ge1.
+\end{equation}
+故 $s\cdot e(\phi)\ge\norm s^2/(2a)$，进而 $\norm{s-ae(\phi)}\le a$。当 $0\le r\le a$，$re(\phi)$ 是 $0$ 与 $ae(\phi)$ 的凸组合，由距离凸性得 $\norm{s-re(\phi)}\le a$。当 $a\le r\le b$，
+\begin{equation}
+\norm{s-re(\phi)}^2-r^2
+=\norm s^2-2r\,s\cdot e(\phi)
+\le\norm s^2(1-r/a)\le0.
+\end{equation}
+两段分别得到 $d_2\le a$ 与 $d_2\le r$，故总有 $d_2\le\max(a,r)\le\rho$。
+
+完整扇形模型中，取可能源位置 $0,au_-,au_+$ 和半径 $a$，可分别推出三个圆盘约束的必要性。若严格排除 $r\le5$ 或裁去圆域外区域，则这些测试位置可能不再允许，所以此时只保留充分性结论。这个证明也避免了把圆弧扇形的极点误写成只有三个点。
+
+\subsection{径向后验及第二次接收概率}
+固定源位置 $G$ 时，允许的接收半径区间是 $[\max(a,d_1),b]$，其长度即 $K_1(d_1)$。两次接收共用半径，所以同时允许的区间长度为 $K_{12}(d_1,d_2)$。这证明式\eqref{eq:weights}，也说明为何不能将两个独立半径的权重相乘。
+
+对圆心第一点，交换积分顺序得
+\begin{align}
+I_1&=\int_a^b\int_0^\rho r\,\mathrm dr\,\mathrm d\rho
+=\frac{b^3-a^3}{6},\\
+I_2&=\int_a^b\int_0^\rho r^2\,\mathrm dr\,\mathrm d\rho
+=\frac{b^4-a^4}{12}.
+\end{align}
+严格排除5米近距区后，分母、分子分别变为 $I_1-(b-a)5^2/2$ 与 $I_2-(b-a)5^3/3$。
+
+给定候选点 $S$ 和第二误差 $\delta\in[-\eps,\eps]$，令 $\theta_2=\arg(G-S)+\delta$。任意区域指标 $H$ 的第二次示向条件期望为
+\begin{equation}
+\mathbb E[H\mid\text{第二次示向}]=
+\frac{\displaystyle\int\!\int rK_{12}\ind_{d_2>5}
+\left[\frac1{2\eps}\int_{-\eps}^{\eps}H(K_2(S,\theta_2))\,\mathrm d\delta\right]\mathrm dr\,\mathrm d\phi}
+{\displaystyle\int\!\int rK_{12}\ind_{d_2>5}\,\mathrm dr\,\mathrm d\phi}.
+\end{equation}
+严格按第一读数为示向时，径向积分从5开始。取 $H=r_*$ 得平均包围半径，取 $H=\ind_{r_*\le20}$ 得示向条件下的一次认证清除概率；近距分支另加其概率。
+
+对一维积分 $\int_l^u f(t)\,\mathrm dt$，Gauss--Legendre求积写为
+\begin{equation}
+\int_l^u f(t)\,\mathrm dt\approx\frac{u-l}{2}\sum_{k=1}^q w_k
+f\left(\frac{u+l}{2}+\frac{u-l}{2}\xi_k\right).
+\end{equation}
+将径向、角度和第二误差分别离散，形成张量求积。先在 $r=a$、$d_2=a,b,5$ 及圆域边界处划分区间，能减轻折点影响。确定性求积仍有离散误差，不应称为解析精确值；用加倍节点数比较收敛，并与独立抽样对照。
+
+\subsection{局部交会面积与直径}
+取两个单位法向夹角为 $\alpha$，误差带满足 $|n_1\cdot\Delta|\le h_1$、$|n_2\cdot\Delta|\le h_2$。线性映射 $\Delta\mapsto(n_1\cdot\Delta,n_2\cdot\Delta)$ 的行列式绝对值为 $|\sin\alpha|$，故面积为 $4h_1h_2/|\sin\alpha|$。
+
+选 $n_1=(1,0)$、$n_2=(\cos\alpha,\sin\alpha)$，四个顶点为
+\begin{equation}
+\Delta_{s,t}=\left(s h_1,\frac{t h_2-s h_1\cos\alpha}{\sin\alpha}\right),\qquad s,t\in\{-1,1\}.
+\end{equation}
+区域中心对称，直径等于最大顶点范数的两倍；选择 $st$ 使交叉项为正即得式\eqref{eq:linear-diameter}。
+
+\subsection{一般正多边形布局的覆盖半径}
+设圆心加半径 $r_h\le R_0$ 的正 $n$ 边形顶点，$n\ge3$，令 $\beta=\pi/n$。把平面划为相邻顶点的对称扇区。半径为 $t$ 的点，到最近环顶点的最坏距离出现在扇区中线，其平方为
+\begin{equation}
+g(t)^2=t^2+r_h^2-2tr_h\cos\beta.
+\end{equation}
+同时圆心距离为 $t$。两者相等于 $t_0=r_h/(2\cos\beta)$。在 $[0,t_0]$ 上，最近扫描点距离不超过 $t_0$；在 $[t_0,R_0]$ 上，$g(t)^2$ 为凸二次函数，其最大值在端点取得。因此
+\begin{equation}
+\boxed{c_n(r_h)=\max\left\{\frac{r_h}{2\cos(\pi/n)},
+\sqrt{R_0^2+r_h^2-2R_0r_h\cos(\pi/n)}\right\}.}
+\label{eq:generalcover}
+\end{equation}
+该式适用于上述 $n\ge3,\ 0<r_h\le R_0$ 条件，内部项不是 $r_h\sin(\pi/n)$。六边形代入即得式\eqref{eq:coverhex}。
+
+若要求 $c_n(r_h)\le a$，必须满足
+\begin{equation}
+R_0\cos\beta-\sqrt{a^2-R_0^2\sin^2\beta}\le r_h
+\le R_0\cos\beta+\sqrt{a^2-R_0^2\sin^2\beta},
+\end{equation}
+同时满足 $r_h\le2a\cos\beta$ 和 $r_h\le R_0$；根号内为负时，该布局无解。六边形下最小可行环半径为
+\begin{equation}
+r_{h,\min}=900\sqrt3-100\sqrt{19}\approx1122.96\,\mathrm m.
+\end{equation}
+圆心起步、沿环访问的开放路径长度为 $r_h+2(n-1)r_h\sin(\pi/n)$。以此加上 $(n+1)$ 个停点的检测和切频代价，可以比较同族布局，但不构成所有搜索路径的全局最优性证明。
+
+\subsection{栅格证书应覆盖整个单元}
+若正方形单元边长为 $h$、中心为 $z$，则其中任意点到 $z$ 的距离不超过 $h/\sqrt2$。要证明整个单元位于以检测点 $q$ 为圆心的接收圆内，可以检查
+\begin{equation}
+\norm{q-z}+h/\sqrt2\le a.
+\end{equation}
+也可检查正方形四个顶点均在圆盘内，因为圆盘是凸集。只检查格心会把边缘未覆盖位置误判为已覆盖。
+
+对联合半径剪枝，记单元 $B$ 到正观测点的最小距离为 $d_i^-(B)$、到负观测点的最大距离为 $d_k^+(B)$。若
+\begin{equation}
+\max\left(a,\max_i d_i^-(B)\right)>
+\min\left(b,\min_k d_k^+(B)\right),
+\end{equation}
+则整格不存在可行半径，可安全删除；反向不成立，未被删去的格仍可能不可行，应细分而不是直接认定有源。
