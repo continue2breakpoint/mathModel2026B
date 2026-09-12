@@ -1,0 +1,98 @@
+  [q3        ] seed=1   clear=11/11 vt=    5400 avg=  490.9 dist=  22215 meas= 153 wall= 0.25
+  [q3        ] seed=2   clear=11/16 vt=    5974 avg=  543.1 dist=  23879 meas= 195 wall= 0.45
+  [q3        ] seed=3   clear= 9/11 vt=    5640 avg=  626.7 dist=  22942 meas= 171 wall= 0.39
+  [q3        ] seed=4   clear=11/11 vt=    5450 avg=  495.5 dist=  22421 meas= 154 wall= 0.33
+  [q3        ] seed=5   clear=14/14 vt=    5045 avg=  360.4 dist=  20245 meas= 157 wall= 0.38
+  [q3        ] seed=6   clear=14/16 vt=    7363 avg=  525.9 dist=  30431 meas= 210 wall= 0.65
+  [q3        ] seed=7   clear=10/12 vt=    4518 avg=  451.8 dist=  17333 meas= 170 wall= 0.40
+  [q3        ] seed=8   clear=11/11 vt=    5280 avg=  480.0 dist=  21367 meas= 161 wall= 0.41
+  [q3        ] seed=9   clear=11/13 vt=    5544 avg=  504.0 dist=  22116 meas= 182 wall= 0.44
+  [q3        ] seed=10  clear=14/14 vt=    4655 avg=  332.5 dist=  18360 meas= 153 wall= 0.36
+  [q3        ] seed=11  clear=10/13 vt=    4944 avg=  494.4 dist=  19750 meas= 160 wall= 0.33
+  [q3        ] seed=12  clear=10/13 vt=    7783 avg=  778.3 dist=  32671 meas= 208 wall= 0.55
+  [q3        ] seed=13  clear= 8/12 vt=    7364 avg=  920.5 dist=  30762 meas= 202 wall= 0.33
+  [q3        ] seed=14  clear= 9/10 vt=    5091 avg=  565.7 dist=  20535 meas= 159 wall= 0.25
+  [q3        ] seed=15  clear=11/11 vt=    4247 avg=  386.1 dist=  16519 meas= 149 wall= 0.35
+  [q3        ] seed=16  clear=12/12 vt=    4004 avg=  333.6 dist=  14904 meas= 163 wall= 0.33
+  [q3        ] seed=17  clear=11/14 vt=    6375 avg=  579.6 dist=  26031 meas= 191 wall= 0.57
+  [q3        ] seed=18  clear= 7/11 vt=    4684 avg=  669.1 dist=  18188 meas= 171 wall= 0.41
+  [q3        ] seed=19  clear=14/15 vt=    4611 avg=  329.4 dist=  18352 meas= 146 wall= 0.36
+  [q3        ] seed=20  clear=15/15 vt=    6279 avg=  418.6 dist=  25744 meas= 182 wall= 0.43
+  [q3        ] seed=21  clear=10/11 vt=    4991 avg=  499.1 dist=  19969 meas= 161 wall= 0.26
+  [q3        ] seed=22  clear=11/11 vt=    4920 avg=  447.2 dist=  19808 meas= 152 wall= 0.29
+  [q3        ] seed=23  clear=15/16 vt=    4569 avg=  304.6 dist=  17835 meas= 156 wall= 0.40
+  [q3        ] seed=24  clear=12/15 vt=    6756 avg=  563.0 dist=  27520 meas= 205 wall= 0.36
+  [q3        ] seed=25  clear= 9/13 vt=    5862 avg=  651.3 dist=  24233 meas= 165 wall= 0.27
+  [q3        ] seed=26  clear=13/15 vt=    5858 avg=  450.6 dist=  23939 meas= 170 wall= 0.31
+  [q3        ] seed=27  clear=12/15 vt=    5874 avg=  489.5 dist=  24227 meas= 164 wall= 0.33
+  [q3        ] seed=28  clear= 8/10 vt=    4349 avg=  543.6 dist=  16870 meas= 158 wall= 0.27
+  [q3        ] seed=29  clear=12/14 vt=    6328 avg=  527.4 dist=  26162 meas= 176 wall= 0.32
+  [q3        ] seed=30  clear=13/14 vt=    5100 avg=  392.3 dist=  20850 meas= 146 wall= 0.33
+  [matrix-dir] seed=1   clear=11/11 vt=    6769 avg=  615.4 dist=  27491 meas= 204 wall= 2.16
+  [matrix-dir] seed=2   clear=14/16 vt=    6659 avg=  475.6 dist=  27098 meas= 200 wall= 2.60
+  [matrix-dir] seed=3   clear=10/11 vt=    4061 avg=  406.1 dist=  15400 meas= 157 wall= 1.65
+  [matrix-dir] seed=4   clear=11/11 vt=    4562 avg=  414.7 dist=  17716 meas= 163 wall= 2.02
+  [matrix-dir] seed=5   clear=14/14 vt=    5154 avg=  368.1 dist=  21334 meas= 138 wall= 1.74
+  [matrix-dir] seed=6   clear=16/16 vt=    6070 avg=  379.4 dist=  25021 meas= 169 wall= 2.38
+  [matrix-dir] seed=7   clear=11/12 vt=    4132 avg=  375.6 dist=  15880 meas= 152 wall= 1.71
+  [matrix-dir] seed=8   clear=11/11 vt=    4867 avg=  442.5 dist=  19452 meas= 156 wall= 1.91
+  [matrix-dir] seed=9   clear=12/13 vt=    5204 avg=  433.7 dist=  20995 meas= 161 wall= 1.99
+  [matrix-dir] seed=10  clear=14/14 vt=    5106 avg=  364.7 dist=  20955 meas= 142 wall= 2.02
+  [matrix-dir] seed=11  clear=12/13 vt=    5899 avg=  491.6 dist=  23805 meas= 184 wall= 2.21
+  [matrix-dir] seed=12  clear=13/13 vt=    5440 avg=  418.5 dist=  22056 meas= 164 wall= 2.02
+  [matrix-dir] seed=13  clear= 9/12 vt=    7033 avg=  781.4 dist=  28404 meas= 221 wall= 2.50
+  [matrix-dir] seed=14  clear= 9/10 vt=    4132 avg=  459.1 dist=  15900 meas= 153 wall= 1.57
+  [matrix-dir] seed=15  clear=11/11 vt=    4034 avg=  366.7 dist=  15233 meas= 158 wall= 2.18
+  [matrix-dir] seed=16  clear=12/12 vt=    4468 avg=  372.3 dist=  17359 meas= 158 wall= 1.83
+  [matrix-dir] seed=17  clear=12/14 vt=    6824 avg=  568.6 dist=  27693 meas= 209 wall= 2.47
+  [matrix-dir] seed=18  clear= 9/11 vt=    4763 avg=  529.2 dist=  18640 meas= 167 wall= 1.78
+  [matrix-dir] seed=19  clear=14/15 vt=    4069 avg=  290.7 dist=  16282 meas= 124 wall= 1.61
+  [matrix-dir] seed=20  clear=15/15 vt=    5073 avg=  338.2 dist=  20544 meas= 151 wall= 1.97
+  [matrix-dir] seed=21  clear= 9/11 vt=    4225 avg=  469.4 dist=  16065 meas= 164 wall= 1.63
+  [matrix-dir] seed=22  clear=11/11 vt=    5361 avg=  487.4 dist=  22014 meas= 152 wall= 1.81
+  [matrix-dir] seed=23  clear=15/16 vt=    6292 avg=  419.4 dist=  25763 meas= 181 wall= 2.44
+  [matrix-dir] seed=24  clear=14/15 vt=    6666 avg=  476.1 dist=  26905 meas= 209 wall= 2.53
+  [matrix-dir] seed=25  clear=10/13 vt=    8771 avg=  877.1 dist=  36913 meas= 230 wall= 2.34
+  [matrix-dir] seed=26  clear=14/15 vt=    7688 avg=  549.1 dist=  32610 meas= 188 wall= 2.50
+  [matrix-dir] seed=27  clear=14/15 vt=    4475 avg=  319.7 dist=  17627 meas= 150 wall= 2.06
+  [matrix-dir] seed=28  clear=10/10 vt=    4797 avg=  479.7 dist=  19170 meas= 154 wall= 1.80
+  [matrix-dir] seed=29  clear=13/14 vt=    4538 avg=  349.1 dist=  17861 meas= 153 wall= 1.84
+  [matrix-dir] seed=30  clear=13/14 vt=    6064 avg=  466.4 dist=  24984 meas= 170 wall= 2.31
+  [paper-q4  ] seed=1   clear=11/11 vt=   13520 avg= 1229.1 dist=  47975 meas= 656 wall= 0.58
+  [paper-q4  ] seed=2   clear=16/16 vt=   18988 avg= 1186.8 dist=  69687 meas= 875 wall= 0.78
+  [paper-q4  ] seed=3   clear=11/11 vt=   15640 avg= 1421.9 dist=  56742 meas= 729 wall= 0.68
+  [paper-q4  ] seed=4   clear=11/11 vt=   14607 avg= 1327.9 dist=  53410 meas= 656 wall= 0.72
+  [paper-q4  ] seed=5   clear=14/14 vt=   16908 avg= 1207.7 dist=  63860 meas= 695 wall= 0.88
+  [paper-q4  ] seed=6   clear=16/16 vt=   19118 avg= 1194.9 dist=  72041 meas= 807 wall= 0.90
+  [paper-q4  ] seed=7   clear=12/12 vt=   16425 avg= 1368.7 dist=  60433 meas= 737 wall= 0.93
+  [paper-q4  ] seed=8   clear=11/11 vt=   14188 avg= 1289.8 dist=  51313 meas= 656 wall= 0.71
+  [paper-q4  ] seed=9   clear=13/13 vt=   18262 avg= 1404.8 dist=  67942 meas= 803 wall= 1.00
+  [paper-q4  ] seed=10  clear=14/14 vt=   15549 avg= 1110.6 dist=  58043 meas= 656 wall= 0.69
+  [paper-q4  ] seed=11  clear=13/13 vt=   17388 avg= 1337.5 dist=  64398 meas= 770 wall= 0.89
+  [paper-q4  ] seed=12  clear=13/13 vt=   18048 avg= 1388.3 dist=  66872 meas= 803 wall= 0.75
+  [paper-q4  ] seed=13  clear=12/12 vt=   17298 avg= 1441.5 dist=  64077 meas= 766 wall= 0.88
+  [paper-q4  ] seed=14  clear=10/10 vt=   14580 avg= 1458.0 dist=  52346 meas= 694 wall= 0.66
+  [paper-q4  ] seed=15  clear=11/11 vt=   15052 avg= 1368.4 dist=  54732 meas= 692 wall= 0.87
+  [paper-q4  ] seed=16  clear=12/12 vt=   14843 avg= 1236.9 dist=  54541 meas= 657 wall= 0.62
+  [paper-q4  ] seed=17  clear=14/14 vt=   16772 avg= 1198.0 dist=  62324 meas= 729 wall= 0.90
+  [paper-q4  ] seed=18  clear=11/11 vt=   16046 avg= 1458.7 dist=  58720 meas= 731 wall= 0.69
+  [paper-q4  ] seed=19  clear=15/15 vt=   15399 avg= 1026.6 dist=  55435 meas= 729 wall= 0.89
+  [paper-q4  ] seed=20  clear=15/15 vt=   16664 avg= 1110.9 dist=  61759 meas= 729 wall= 0.68
+  [paper-q4  ] seed=21  clear=11/11 vt=   16292 avg= 1481.1 dist=  59045 meas= 767 wall= 0.95
+  [paper-q4  ] seed=22  clear=11/11 vt=   14759 avg= 1341.7 dist=  54145 meas= 657 wall= 0.64
+  [paper-q4  ] seed=23  clear=16/16 vt=   14208 avg=  888.0 dist=  51265 meas= 657 wall= 0.82
+  [paper-q4  ] seed=24  clear=15/15 vt=   20512 avg= 1367.4 dist=  77353 meas= 874 wall= 0.86
+  [paper-q4  ] seed=25  clear=13/13 vt=   17455 avg= 1342.7 dist=  63956 meas= 801 wall= 0.91
+  [paper-q4  ] seed=26  clear=15/15 vt=   16764 avg= 1117.6 dist=  63947 meas= 662 wall= 0.71
+  [paper-q4  ] seed=27  clear=15/15 vt=   17445 avg= 1163.0 dist=  65611 meas= 731 wall= 0.82
+  [paper-q4  ] seed=28  clear=10/10 vt=   13378 avg= 1337.8 dist=  47263 meas= 657 wall= 0.62
+  [paper-q4  ] seed=29  clear=14/14 vt=   16953 avg= 1211.0 dist=  63202 meas= 730 wall= 0.87
+  [paper-q4  ] seed=30  clear=14/14 vt=   14239 avg= 1017.1 dist=  51471 meas= 657 wall= 0.65
+
+############ summary (dir, seeds=30, n_directional=None) ############
+strategy       full  ratioMean  ratioMin    vt_med   avg_med   dist_med  meas_med  wall_med
+q3             9/30     0.8704     0.636      5340    494.93      21742     163.5      0.35
+matrix-dir    12/30     0.9329     0.750      5130    438.08      20975     162.0      2.02
+paper-q4      30/30     1.0000     1.000     16358   1308.84      59739     729.0      0.80
+  q3 未全清：2(11/16), 3(9/11), 6(14/16), 7(10/12), 9(11/13), 11(10/13), 12(10/13), 13(8/12), 14(9/10), 17(11/14), 18(7/11), 19(14/15), 21(10/11), 23(15/16), 24(12/15), 25(9/13), 26(13/15), 27(12/15), 28(8/10), 29(12/14), 30(13/14)
+  matrix-dir 未全清：2(14/16), 3(10/11), 7(11/12), 9(12/13), 11(12/13), 13(9/12), 14(9/10), 17(12/14), 18(9/11), 19(14/15), 21(9/11), 23(15/16), 24(14/15), 25(10/13), 26(14/15), 27(14/15), 29(13/14), 30(13/14)
