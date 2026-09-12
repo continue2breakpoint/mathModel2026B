@@ -93,6 +93,8 @@ RHO_MODELS = zones.RHO_MODELS
 RECOMMENDED_LOCAL = [(850.0, 520.0), (850.0, -520.0)]
 
 app = Flask(__name__)
+from q2_matrix_dashboard import matrix_app
+app.register_blueprint(matrix_app)
 
 
 def _gauss_legendre(n: int) -> tuple[np.ndarray, np.ndarray]:
@@ -666,6 +668,7 @@ HTML_PAGE = r"""<!doctype html>
 <div class="wrap">
   <aside class="panel">
     <h1>问题2 第二检测点选择热图 <span style="font-size:11px;color:#8b93a7" id="ver">__VERSION__</span></h1>
+    <p><a href="/matrix">进入多观测知识矩阵热图 →</a></p>
     <div class="hint">
       决策量只有 <b>S2</b>；<b>S1、theta1、有效距离 ρ</b> 都是环境给定、不可决策的量，
       因此全部做成可调旋钮，用来检验 S2 的选取在整个可行范围内都成立。

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>题目 2 · 知识矩阵选点热图</title><script src="/plotly.min.js"></script>
+<style>
+body{font:14px system-ui,sans-serif;margin:24px;background:#f5f7fb;color:#172338}h1{font-size:23px}h2{font-size:17px}a{color:#245bd0}.panel{background:white;padding:18px;border:1px solid #dce2ec;border-radius:10px;margin:14px 0}.hint{color:#59677b;line-height:1.7}input,select,button{font:inherit;border:1px solid #bac6d6;border-radius:5px;padding:7px;margin:4px}input[type=number]{width:88px}button{cursor:pointer;background:#f0f5ff}button:disabled{opacity:.5;cursor:wait}.scroll{overflow:auto}table{border-collapse:collapse}td,th{border:1px solid #dce2ec;padding:6px;min-width:150px}th:first-child,td:first-child{min-width:90px}td input{width:95px!important}#plot{height:660px}#status{white-space:pre-wrap;margin:10px 0}textarea{box-sizing:border-box;width:100%;height:150px}label{display:inline-block}#probe{font-variant-numeric:tabular-nums}details{margin-top:12px}
+</style></head><body>
+<a href="/">← 原双点热图</a><h1>题目 2 · 根据知识矩阵选择下一观测点</h1>
+<p class="hint">输入一个尚未清除的全向源频道。坐标采用世界坐标（米），示向角从 +x 轴逆时针计量，误差 ±1°。所有观测共用同一个有效距离 ρ。</p>
+<div class="panel"><h2>知识矩阵</h2>
+<label>频道 <input id="channel" type="number" min="1" max="20" value="1"></label>
+<button id="add">新增观测列</button><button id="example">两次交会示例</button>
+<button id="export">导出 JSON</button><button id="exportMd">导出 Markdown</button>
+<label>导入文件 <input id="file" type="file" accept=".json,.md,.txt"></label>
+<div class="scroll"><table id="matrix"></table></div>
+<details><summary>粘贴导入 JSON / 知识矩阵 Markdown</summary><p class="hint">Markdown 可包含多个频道，按上方频道号选择一行。JSON 保存真实坐标；旧版 matrix 导出的 Markdown 只有格心坐标，导入时按表头坐标计算。</p><textarea id="importText" aria-label="知识矩阵文本"></textarea><button id="import">导入文本</button></details>
+</div>
+<div class="panel"><h2>计算设置</h2>
+<label>有效距离 <select id="rho_model"><option value="uniform">区间均匀先验</option><option value="fixed">固定值</option></select></label>
+<label>下限 <input id="rho_min" type="number" value="1000"></label><label>上限 <input id="rho_max" type="number" value="1500"></label><label>固定值 <input id="rho_fixed" type="number" value="1250"></label><br>
+<label>指标 <select id="metric"><option value="Rmin">最小包围圆半径 Rmin (m)</option><option value="N20">20 m 圆覆盖数下界 N20</option><option value="pdet">测到信号概率</option></select></label>
+<label>统计量 <select id="stat"><option value="mean">期望</option><option value="variance">方差</option></select></label>
+<label>统计条件 <select id="condition"><option value="all">全部结果（含未测到）</option><option value="detected">仅测到信号（含 near）</option></select></label>
+<p class="hint">定位区域采用保守端点：正例半径取上限，负例仅排除下限；概率权重则使用全部观测对共同 ρ 的约束。N20 是多边形近似区域的覆盖数下界，未求解连续圆覆盖的精确最优值。进入 5 m 内按 near 结果处理；相同坐标重测不产生新信息。</p>
+<label>x 最小 <input id="xmin" type="number" value="-1800"></label><label>x 最大 <input id="xmax" type="number" value="1800"></label><label>y 最小 <input id="ymin" type="number" value="-1800"></label><label>y 最大 <input id="ymax" type="number" value="1800"></label>
+<button id="zoom">放大当前可能区域周围</button><button id="reset">全场范围</button><br>
+<label>网格 <select id="resolution"><option>15</option><option>25</option><option>41</option><option>51</option></select></label>
+<label>求积阶数 <select id="order"><option>3</option><option>5</option><option>8</option><option>10</option></select></label>
+<label>角度积分段 <select id="angle_bins"><option>48</option><option>96</option><option>192</option><option>360</option></select></label>
+<label>圆周边数 <select id="sides"><option>96</option><option>192</option><option>360</option></select></label>
+<button id="compute">计算热图</button><div id="status" role="status">设置矩阵后点击计算。高精度适合缩小绘图范围后比较。</div>
+<p class="hint">采用确定性数值求积；提高求积阶数、角度段数与圆周边数比较结果，可检查数值收敛。图中概率不作为连续区域的“保证测到”证明。</p>
+</div>
+<div class="panel"><div id="plot"></div><div id="probe">点击热图查看候选点；可将该点添加为新的待测列。</div><button id="addProbe" disabled>将选中点加入矩阵</button></div>
+<script>
+const $=id=>document.getElementById(id);
+let columns=[{point:[0,0],status:'find',bearing_deg:0}],last=null,selected=null,busy=false,revision=0;
+const statuses=[['find','测到并测向'],['not_find','未测到'],['not_measure','未观测'],['near','5 m 内信号过强']];
+function changed(){revision++;$('status').textContent='矩阵或参数已更新，请重新计算；已有图是上次结果。';}
+function render(){
+ const table=$('matrix');table.replaceChildren();
+ const rows=['观测点','x (m)','y (m)','频道 '+$('channel').value,'示向角 (°)','操作'].map(t=>{const r=document.createElement('tr'),h=document.createElement('th');h.textContent=t;r.append(h);table.append(r);return r;});
+ columns.forEach((c,i)=>{rows.forEach((r,j)=>{const td=document.createElement('td');r.append(td);
+ if(j===0){td.textContent='P'+(i+1);return;}
+ if(j===3){const s=document.createElement('select');statuses.forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;s.append(o);});s.value=c.status;s.onchange=()=>{c.status=s.value;if(c.status==='find'&&c.bearing_deg===undefined)c.bearing_deg=0;changed();render();};td.append(s);return;}
+ if(j===5){const b=document.createElement('button');b.textContent='删除';b.onclick=()=>{columns.splice(i,1);changed();render();};td.append(b);return;}
+ const input=document.createElement('input');input.type='number';input.step='any';input.value=j===4?(c.bearing_deg??0):c.point[j-1];input.disabled=j===4&&c.status!=='find';input.setAttribute('aria-label','P'+(i+1)+' '+['','','','', '示向角'][j]);input.oninput=()=>{if(j===4)c.bearing_deg=Number(input.value);else c.point[j-1]=Number(input.value);changed();};td.append(input);
+ });});
+}
+function matrix(){return {schema:'q2-channel/v1',channel:Number($('channel').value),columns:columns.map(c=>c.status==='find'?{point:[...c.point],status:c.status,bearing_deg:c.bearing_deg}:{point:[...c.point],status:c.status})};}
+function payload(){const d={matrix:matrix(),bounds:['xmin','xmax','ymin','ymax'].map(k=>Number($(k).value))};['rho_min','rho_max','rho_fixed','resolution','order','sides','angle_bins'].forEach(k=>d[k]=Number($(k).value));['rho_model','metric','stat','condition'].forEach(k=>d[k]=$(k).value);return d;}
+async function api(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error||r.statusText);return d;}
+async function importText(text){try{const d=await api('/api/matrix/import',{text,channel:Number($('channel').value)});columns=d.columns;$('channel').value=d.channel;changed();render();}catch(e){$('status').textContent='导入失败：'+e.message;}}
+function download(text,name,type){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+$('add').onclick=()=>{columns.push({point:[0,0],status:'not_measure'});changed();render();};
+$('example').onclick=()=>{columns=[{point:[0,0],status:'find',bearing_deg:0},{point:[850,520],status:'find',bearing_deg:Math.atan2(-520,150)*180/Math.PI+360}];changed();render();};
+$('channel').onchange=()=>{changed();render();};
+$('export').onclick=()=>download(JSON.stringify(matrix(),null,2),'channel-'+$('channel').value+'.json','application/json');
+$('exportMd').onclick=()=>{const m=matrix();const head='| Channel\\Path | '+m.columns.map(c=>'('+c.point.join(', ')+')').join(' | ')+' |\n';const sep='| - | '+m.columns.map(()=>'-').join(' | ')+' |\n';const row='| '+m.channel+' | '+m.columns.map(c=>JSON.stringify(c.status==='find'?{status:'find',angle:{svd:c.bearing_deg}}:{status:c.status.replaceAll('_',' ')})).join(' | ')+' |\n';download(head+sep+row,'channel-'+m.channel+'.md','text/markdown');};
+$('import').onclick=()=>importText($('importText').value);
+$('file').onchange=async()=>{if($('file').files[0])await importText(await $('file').files[0].text());};
+$('reset').onclick=()=>{['xmin','xmax','ymin','ymax'].forEach((k,i)=>$(k).value=i%2?1800:-1800);changed();};
+$('zoom').onclick=()=>{if(!last){$('status').textContent='请先计算一次，获取当前可能区域。';return;}const b=last.source_bounds;const pad=Math.max(20,Math.max(b[1]-b[0],b[3]-b[2])*.5);['xmin','xmax','ymin','ymax'].forEach((k,i)=>$(k).value=Math.round(b[i]+(i%2?pad:-pad)));changed();};
+$('compute').onclick=async()=>{if(busy)return;busy=true;$('compute').disabled=true;const rev=revision,body=payload();$('status').textContent='计算中…';try{
+ const d=await api('/api/matrix/heatmap',body);last=d;
+ const label=(d.stat==='mean'?'E':'Var')+'['+d.metric+']';
+ const traces=[{type:'heatmap',x:d.x,y:d.y,z:d.z,customdata:d.pdet,colorscale:'Viridis',colorbar:{title:label},hovertemplate:'x=%{x:.1f} m<br>y=%{y:.1f} m<br>'+label+'=%{z:.4f}<br>p_det=%{customdata:.4f}<extra></extra>'}];
+ d.source_polys.forEach(p=>{const q=p.concat([p[0]]);traces.push({type:'scatter',mode:'lines',x:q.map(v=>v[0]),y:q.map(v=>v[1]),line:{color:'#ed6b25',width:1},fill:'toself',fillcolor:'rgba(237,107,37,.12)',showlegend:false,hoverinfo:'skip'});});
+ traces.push({type:'scatter',mode:'markers+text',x:body.matrix.columns.map(c=>c.point[0]),y:body.matrix.columns.map(c=>c.point[1]),text:body.matrix.columns.map((c,i)=>'P'+(i+1)),textposition:'top center',marker:{size:9,color:'#e72865'},name:'观测点'});
+ await Plotly.react('plot',traces,{title:label+' · '+(body.condition==='all'?'全部结果':'条件于测到信号'),xaxis:{title:'世界坐标 x (m)',range:body.bounds.slice(0,2)},yaxis:{title:'世界坐标 y (m)',scaleanchor:'x',scaleratio:1,range:body.bounds.slice(2)},margin:{t:50}}, {responsive:true});
+ $('status').textContent=`当前区域 Rmin=${d.baseline.Rmin.toFixed(3)} m，N20 下界=${d.baseline.N20}；${d.nodes} 个源积分节点，耗时 ${d.elapsed_s.toFixed(2)} s。橙色为保守可能区域。`+(rev!==revision?'\n输入已改变，此图对应计算开始时的数据。':'');
+ const plot=$('plot');plot.removeAllListeners('plotly_click');plot.on('plotly_click',async ev=>{const p=ev.points[0];selected=[p.x,p.y];$('addProbe').disabled=false;$('probe').textContent='计算所选点…';try{const r=await api('/api/matrix/probe',{...body,point:selected});$('probe').textContent=`(${p.x.toFixed(2)}, ${p.y.toFixed(2)})：p_det=${r.pdet.toFixed(5)}，期望=${r.mean?.toFixed(5)??'无定义'}，方差=${r.variance?.toFixed(5)??'无定义'}`+(r.repeated?'；已观测坐标，新增信息为零。':'');}catch(e){$('probe').textContent=e.message;}});
+ }catch(e){$('status').textContent='计算失败：'+e.message;}finally{busy=false;$('compute').disabled=false;}};
+$('addProbe').onclick=()=>{if(selected){columns.push({point:[...selected],status:'not_measure'});changed();render();}};
+['rho_model','rho_min','rho_max','rho_fixed','metric','stat','condition','xmin','xmax','ymin','ymax','resolution','order','angle_bins','sides'].forEach(k=>$(k).addEventListener('change',changed));
+render();
+</script></body></html>

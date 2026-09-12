@@ -5,6 +5,11 @@
 
 ## 1. 快速开始
 
+题目 2 多观测热图：运行 `python3 script/q2_dashboard.py --port 8055`，
+打开 `http://127.0.0.1:8055/matrix`。支持单频道知识矩阵编辑、JSON / Markdown
+导入导出与下一观测点的期望、方差热图。模型与精度说明见
+[知识矩阵热图](../docs/q2_knowledge_heatmap.md)。
+
 ```bash
 cd mathModel2026B
 
