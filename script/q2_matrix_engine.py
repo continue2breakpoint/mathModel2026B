@@ -79,6 +79,31 @@ def normalize_matrix(data, channel=1):
     return dict(schema='q2-channel/v1', channel=channel, columns=result)
 
 
+def parts_to_lists(parts, digits=4):
+    """Polygon pieces as plain [[x, y], ...] lists for the JSON API."""
+    return [[[round(float(v), digits) for v in point] for point in poly]
+            for poly in parts if len(poly) >= 3]
+
+
+def ray_exit(point, direction_deg, radius=1800.0):
+    """Far intersection of a ray leaving ``point`` with the site circle.
+
+    Used to draw the two +-1 deg measurement rays of a find observation: the
+    wedge itself is unbounded, so the drawing needs an explicit far end.
+    """
+    ux, uy = math.cos(math.radians(direction_deg)), math.sin(math.radians(direction_deg))
+    ox, oy = float(point[0]), float(point[1])
+    b = ox * ux + oy * uy
+    c = ox * ox + oy * oy - radius * radius
+    disc = b * b - c
+    if disc <= 0.0:
+        return None
+    t = -b + math.sqrt(disc)
+    if t <= 0.0:
+        return None
+    return [ox + t * ux, oy + t * uy]
+
+
 def clip(poly, normal, offset):
     """Convex polygon intersected with normal . x <= offset."""
     if len(poly) < 3:
@@ -178,8 +203,9 @@ class MatrixEngine:
             raise ValueError("精度范围：sides 24–360，order 2–10，angle_bins 8–360")
         self.observations = sorted({tuple(c['point']): c for c in self.matrix['columns'] if c['status'] != 'not_measure'}.values(),
                                    key=lambda c: tuple(c['point']))
-        self.parts = [[np.array(v, dtype=float) for v in [(-2000,-2000),(2000,-2000),(2000,2000),(-2000,2000)]]]
-        self.parts = disk(self.parts, [0,0], 1800, self.sides)
+        square = [np.array(v, dtype=float) for v in [(-2000,-2000),(2000,-2000),(2000,2000),(-2000,2000)]]
+        self.site = disk([square], [0,0], 1800, self.sides)
+        self.parts = list(self.site)
         # Apply narrow positive constraints before carving holes.
         for c in self.observations:
             if c['status'] == 'find':
@@ -227,6 +253,57 @@ class MatrixEngine:
     def _mass(self, lower, upper):
         return (lower <= upper).astype(float) if self.fixed else np.maximum(0, upper-lower)
 
+    @staticmethod
+    def zone(pdet):
+        """Detection zone of one candidate, read off p_det itself.
+
+        certain  : every posterior node is detectable (d < U for all of them),
+                   so the next reading succeeds with probability 1 under the
+                   conservative endpoint model -- the matrix counterpart of the
+                   double-point "一定测到" region (there it is judged at rho_min,
+                   here at U(G) = min(b, min_j |G-M_j|)).
+        blind    : no posterior node is detectable; the reading carries no
+                   information and the cell is not rendered.
+        probabilistic: everything in between.
+        """
+        if pdet >= 1.0 - 1e-9:
+            return 'certain'
+        if pdet <= 1e-12:
+            return 'blind'
+        return 'probabilistic'
+
+    def observation_regions(self):
+        """Own constraint geometry of every observation, for the overlay layer.
+
+        Each entry is the region *that observation alone* allows (or excludes),
+        not the intersection: it is what a user needs in order to see why the
+        current possible set looks the way it does.
+        """
+        out = []
+        for c in self.observations:
+            entry = {'point': [float(v) for v in c['point']], 'status': c['status']}
+            point = c['point']
+            if c['status'] == 'find':
+                parts = wedge(self.site, point, c['bearing_deg'])
+                parts = disk(parts, point, self.hi, self.sides)
+                parts = disk(parts, point, 5.0, self.sides, True)
+                entry['bearing_deg'] = float(c['bearing_deg'])
+                entry['poly'] = parts_to_lists(parts)
+                entry['near_radius'] = 5.0
+                entry['rays'] = []
+                for delta in (-1.0, 1.0):
+                    end = ray_exit(point, c['bearing_deg'] + delta)
+                    if end is not None:
+                        entry['rays'].append([[float(point[0]), float(point[1])], end])
+            elif c['status'] == 'near':
+                entry['poly'] = parts_to_lists(disk(self.site, point, min(5.0, self.hi), self.sides))
+                entry['near_radius'] = min(5.0, self.hi)
+            else:  # not_find: this disk is excluded, not allowed
+                entry['poly'] = parts_to_lists(disk(self.site, point, self.lo, self.sides))
+                entry['exclude_radius'] = self.lo
+            out.append(entry)
+        return out
+
     def _quadrature(self):
         nodes, weights = np.polynomial.legendre.leggauss(self.order)
         nodes, weights = (nodes+1)/2, weights/2
@@ -255,15 +332,18 @@ class MatrixEngine:
             if np.linalg.norm(point-c['point']) < 1e-8:
                 detected = c['status'] != 'not_find'
                 if metric == 'pdet':
-                    return dict(pdet=float(detected),mean=float(detected),variance=0.0,repeated=True)
+                    return dict(pdet=float(detected),mean=float(detected),variance=0.0,
+                                repeated=True,zone=self.zone(float(detected)))
                 return dict(pdet=float(detected), mean=self.baseline[metric] if detected or condition=='all' else None,
-                            variance=0.0 if detected or condition=='all' else None, repeated=True)
+                            variance=0.0 if detected or condition=='all' else None, repeated=True,
+                            zone=self.zone(float(detected)))
         d = np.linalg.norm(self.points-point, axis=1)
         prob = self._mass(np.maximum(self.lower,d),self.upper)/self._mass(self.lower,self.upper)
         hit_weights = self.weights*prob
         pdet = min(1.0, max(0.0, float(hit_weights.sum())))
+        zone = self.zone(pdet)
         if metric == 'pdet':
-            return dict(pdet=pdet, mean=pdet, variance=pdet*(1-pdet), repeated=False)
+            return dict(pdet=pdet, mean=pdet, variance=pdet*(1-pdet), repeated=False, zone=zone)
         outcomes = []
         miss = max(0.0,1-pdet)
         if condition == 'all' and miss > 1e-12:
@@ -297,7 +377,7 @@ class MatrixEngine:
                     outcomes.append((mass, metrics(parts)[metric]))
         total = sum(w for w,v in outcomes)
         if total < 1e-12:
-            return dict(pdet=pdet, mean=None, variance=None, repeated=False)
+            return dict(pdet=pdet, mean=None, variance=None, repeated=False, zone=zone)
         mean = sum(w*v for w,v in outcomes)/total
         variance = sum(w*(v-mean)**2 for w,v in outcomes)/total
-        return dict(pdet=pdet, mean=mean, variance=variance, repeated=False)
+        return dict(pdet=pdet, mean=mean, variance=variance, repeated=False, zone=zone)

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN" data-ws="doublet" data-drawer="half" data-default-ws="__DEFAULT_WS__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>题目2 · 观测点选择热图（统一编辑台）</title>
+<script src="/plotly.min.js"></script>
+<link rel="stylesheet" href="/assets/q2_app.css?v=__VERSION__">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="dot"></span>题目2 · 观测点选择热图<span class="ver" id="ver">__VERSION__</span></div>
+  <nav class="seg ws" id="wsTabs" role="tablist" aria-label="工作区"></nav>
+  <div class="spacer"></div>
+  <div class="seg" id="drawerSeg" role="group" aria-label="编辑台显示方式"></div>
+  <div class="pill" id="headStatus">就绪</div>
+</header>
+
+<main class="stage">
+  <section class="plot-col">
+    <div class="card plot-card">
+      <div class="plot-head">
+        <div>
+          <div class="title" id="plotTitle">观测点选择热图</div>
+          <div class="sub" id="plotSub">双点交会与知识矩阵共用同一套编辑台、辅助线图层与导入导出面板</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="row">
+          <button id="computeTop" class="btn primary">计算热图</button>
+          <button id="drawerQuick" class="btn" title="切换编辑台（E 循环 / F 全屏 / Esc 收起）">编辑台</button>
+        </div>
+      </div>
+      <div id="plot"></div>
+      <div class="plot-foot">
+        <div class="badges" id="plotInfo"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+    </div>
+    <div class="card" id="probeCard">
+      <div class="plot-foot"><div class="hint">点击热图任意位置即可检验该候选点。</div></div>
+    </div>
+  </section>
+
+  <aside class="drawer" id="drawer" data-state="half" aria-label="编辑台">
+    <div class="rail" id="rail"></div>
+    <div class="drawer-main">
+      <div class="drawer-head">
+        <div class="who">
+          <b id="drawerWsName">双点交会</b>
+          <span id="drawerWsHint">编辑台</span>
+        </div>
+        <div class="spacer"></div>
+        <button id="drawerCollapse" class="btn ghost icon" title="收起（Esc）">⇥</button>
+        <button id="drawerHalf" class="btn ghost icon" title="半屏">◫</button>
+        <button id="drawerFull" class="btn ghost icon" title="全屏（F）">⛶</button>
+      </div>
+      <div class="drawer-body" id="drawerBody"></div>
+      <div class="drawer-foot">
+        <button id="compute" class="btn primary">计算热图</button>
+        <div class="status" id="status" role="status">就绪</div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="/assets/q2_app.js?v=__VERSION__"></script>
+<script src="/assets/q2_ws_doublet.js?v=__VERSION__"></script>
+<script src="/assets/q2_ws_matrix.js?v=__VERSION__"></script>
+<script>
+  (function () {
+    const Q2 = window.Q2;
+    ['drawerCollapse', 'drawerHalf', 'drawerFull'].forEach(function (id, i) {
+      const state = ['collapsed', 'half', 'full'][i];
+      const node = document.getElementById(id);
+      if (node) node.addEventListener('click', function () { Q2.drawer.set(state); });
+    });
+    const quick = document.getElementById('drawerQuick');
+    if (quick) quick.addEventListener('click', function () { Q2.drawer.cycle(); });
+    ['compute', 'computeTop'].forEach(function (id) {
+      const node = document.getElementById(id);
+      if (node) node.addEventListener('click', function () {
+        const ws = Q2.activeWorkspace();
+        if (ws) ws.draw();
+      });
+    });
+    Q2.boot();
+  })();
+</script>
+</body>
+</html>

@@ -5,10 +5,29 @@
 
 ## 1. 快速开始
 
-题目 2 多观测热图：运行 `python3 script/q2_dashboard.py --port 8055`，
-打开 `http://127.0.0.1:8055/matrix`。支持单频道知识矩阵编辑、JSON / Markdown
-导入导出与下一观测点的期望、方差热图。模型与精度说明见
-[知识矩阵热图](../docs/q2_knowledge_heatmap.md)。
+题目 2 的可视化已经统一成**一个编辑可视化界面**（一套外壳 + 两个工作区）：
+
+```bash
+python3 script/q2_dashboard.py --port 8055
+```
+
+* `http://127.0.0.1:8055/` —— 双点交会工作区（S1、θ1、ρ → 第二检测点 S2 热图）
+* `http://127.0.0.1:8055/matrix` —— 知识矩阵工作区（Channel × Path → 下一观测点热图）
+
+两个工作区共用顶栏切换、同一套控件与配色、同一份**辅助线图层注册表**
+（场地圆、可能源区、测向楔形与 ±1° 射线、近距圈、排除盘、三区着色、p_det 等值线、最优格点）
+和同一份**导入 / 导出 / 粘贴**面板（JSON、Channel × Path Markdown、拖放文件、剪贴板、互转）。
+编辑台是"收纳页"：可**收起 / 半屏 / 全屏**（`E` 循环、`F` 全屏、`Esc` 收起），
+状态写进 URL（`?ws=matrix&drawer=full`）。说明见
+[统一编辑台](../docs/q2_unified_ui.md) 与 [知识矩阵热图](../docs/q2_knowledge_heatmap.md)。
+
+```bash
+# 真浏览器端到端测试（自动拉起 Flask + 无头 Chrome）
+node script/q2_ui_e2e_test.js --shots /tmp/q2-shots
+
+# 后端与几何单测
+PYTHONPATH=cpp python3 -m unittest discover -s script -p 'test_q2_matrix*.py'
+```
 
 ```bash
 cd mathModel2026B
@@ -18,6 +37,9 @@ bash script/smoke.sh
 
 # 带上线上连通性预检
 bash script/smoke.sh --online
+
+# 额外跑一遍题目2 界面的真浏览器端到端测试
+bash script/smoke.sh --ui
 ```
 
 ## 2. 不写死 login-jammers 路径
@@ -83,6 +105,12 @@ pip install -e 'framework[dev]'
 | `q3_diagnose_scan.py` | **覆盖扫描质量诊断**：扫描结束后各频道可行域有多准 |
 | `q3_cover_design.py` | **覆盖扫描设计离线优化**（含"每停点扫 20 频道"的代价） |
 | `report.py` | 汇总 `results.jsonl`：表格 / 分组统计 / CSV / Markdown |
+| `q2_dashboard.py` | **题目2 统一编辑台**：双点交会端点 + 页面与 `/assets` 路由 |
+| `q2_matrix_dashboard.py` | 题目2 知识矩阵端点（与双点共用同一页面，只是默认工作区不同） |
+| `q2_matrix_engine.py` | 单频道知识矩阵后验与非凸保守几何（另输出分区与辅助线几何） |
+| `q2_page.py` | 统一页面外壳与静态资源服务（两个蓝图共用） |
+| `q2_ui_e2e_test.js` | 题目2 界面真浏览器端到端测试（收纳页三态 / 辅助线 / 导入导出 / 互转） |
+| `test_q2_matrix_engine.py` | 知识矩阵几何、后验与 HTTP API 单测 |
 | `smoke.sh` | 一键体检整条工作流 |
 
 > 线上演练的完整说明、逆向细节与"为什么不建议上报"见 [`../说明.md`](../说明.md)。

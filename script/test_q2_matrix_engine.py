@@ -114,6 +114,86 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(client.post('/api/matrix/heatmap',json={**payload,'rho_model':'interval'}).status_code,400)
         self.assertEqual(client.post('/api/matrix/heatmap',json={**payload,'bounds':[0,0,0,1]}).status_code,400)
 
+    def test_zone_classification_matches_pdet(self):
+        """分区是 p_det 本身的读数，界面用它上色，必须和几何判定一致。"""
+        e = MatrixEngine(matrix(find([0,0],0)))
+        self.assertEqual(e.evaluate([850,520])['zone'],'certain')     # 后验必然测到
+        blind = e.evaluate([-4000,0])
+        self.assertEqual(blind['zone'],'blind')
+        self.assertEqual(blind['pdet'],0.0)
+        mid = e.evaluate([0,2400],condition='all')
+        self.assertEqual(mid['zone'],MatrixEngine.zone(mid['pdet']))
+
+    def test_observation_regions_for_overlays(self):
+        """辅助线数据：find 给可行域 + ±1° 射线，not_find 给被排除的 ρ_min 圆盘。"""
+        e = MatrixEngine(matrix(find([0,0],0),dict(point=[-1200,0],status='not_find'),
+                                dict(point=[1000,0],status='near')))
+        regions = {tuple(o['point']): o for o in e.observation_regions()}
+        f = regions[(0.0,0.0)]
+        self.assertEqual(f['status'],'find')
+        self.assertTrue(f['poly'] and f['poly'][0])
+        self.assertEqual(len(f['rays']),2)
+        for ray in f['rays']:
+            self.assertEqual(ray[0],[0.0,0.0])
+            self.assertAlmostEqual(math.hypot(*ray[1]),1800,delta=1)   # 射线画到场地圆
+        n = regions[(-1200.0,0.0)]
+        self.assertEqual(n['status'],'not_find')
+        self.assertEqual(n['exclude_radius'],1000)
+        self.assertTrue(n['poly'])
+        near = regions[(1000.0,0.0)]
+        self.assertEqual(near['status'],'near')
+        self.assertAlmostEqual(near['near_radius'],5.0)
+
+    def test_heatmap_returns_zones_and_overlays(self):
+        client = app.test_client()
+        payload = dict(matrix=matrix(find([0,0],0)),resolution=5,bounds=[-1800,1800,-1800,1800])
+        d = client.post('/api/matrix/heatmap',json=payload).json
+        self.assertEqual(np.shape(d['zone']),(5,5))
+        self.assertEqual(len(d['observations']),1)
+        self.assertEqual(d['observations'][0]['status'],'find')
+        self.assertEqual(d['target_radius'],1800.0)
+        flat = {z for row in d['zone'] for z in row}
+        self.assertTrue(flat <= {None,'certain','probabilistic','blind'})
+        self.assertIn('certain',flat)          # 观测点自身所在格必然是"一定测到"
+
+    def test_probe_reports_zone_and_distances(self):
+        client = app.test_client()
+        payload = dict(matrix=matrix(find([0,0],0)),resolution=3,bounds=[800,900,450,550])
+        d = client.post('/api/matrix/probe',json={**payload,'point':[850,520]}).json
+        self.assertEqual(d['zone'],'certain')
+        self.assertEqual(d['metric'],'Rmin')
+        self.assertEqual(len(d['distances']),1)
+        self.assertAlmostEqual(d['distances'][0]['distance'],math.hypot(850,520),delta=1e-6)
+        self.assertIn('mean_other',d)
+
+    def test_unified_page_is_shared_by_both_routes(self):
+        """两个路由返回同一份统一界面，只有默认工作区不同。"""
+        client = app.test_client()
+        import re
+        root = client.get('/').get_data(as_text=True)
+        mt = client.get('/matrix').get_data(as_text=True)
+        self.assertIn('data-default-ws="doublet"',root)
+        self.assertIn('data-default-ws="matrix"',mt)
+        norm = lambda h: re.sub(r'data-default-ws="[^"]*"','data-default-ws="X"',h)
+        self.assertEqual(norm(root),norm(mt))
+        self.assertEqual(client.get('/favicon.ico').status_code,204)
+
+    def test_assets_are_served_and_traversal_blocked(self):
+        client = app.test_client()
+        for name in ('q2_app.css','q2_app.js','q2_ws_doublet.js','q2_ws_matrix.js'):
+            r = client.get('/assets/'+name)
+            self.assertEqual(r.status_code,200,name)
+            self.assertGreater(len(r.data),2000,name)
+        self.assertEqual(client.get('/assets/../q2_dashboard.py').status_code,404)
+        self.assertEqual(client.get('/assets/nope.js').status_code,404)
+
+    def test_unified_page_has_no_placeholder_left(self):
+        html = app.test_client().get('/').get_data(as_text=True)
+        self.assertNotIn('__VERSION__',html)
+        self.assertNotIn('__DEFAULT_WS__',html)
+        for asset in ('/assets/q2_app.css','/assets/q2_app.js','/assets/q2_ws_doublet.js','/assets/q2_ws_matrix.js'):
+            self.assertIn(asset,html)
+
 
 if __name__ == '__main__':
     unittest.main()

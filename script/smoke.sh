@@ -3,6 +3,7 @@
 #
 #   bash script/smoke.sh            # 离线全流程（不需要 Windows 客户端）
 #   bash script/smoke.sh --online   # 额外做线上连通性预检
+#   bash script/smoke.sh --ui       # 额外跑题目2 界面的真浏览器端到端测试
 #
 # 退出码 0 表示全部通过。
 set -uo pipefail
@@ -23,7 +24,11 @@ if [[ -z "${PYTHON}" ]]; then
 fi
 
 ONLINE=0
-[[ "${1:-}" == "--online" ]] && ONLINE=1
+UI=0
+for arg in "$@"; do
+  [[ "${arg}" == "--online" ]] && ONLINE=1
+  [[ "${arg}" == "--ui" ]] && UI=1
+done
 
 fail=0
 step() { printf '\n=== %s ===\n' "$1"; }
@@ -62,6 +67,21 @@ check $? "run_batch.py"
 step "5. 结果汇总"
 "${PYTHON}" "${SCRIPT_DIR}/report.py" --tag smoke --last 4
 check $? "report.py"
+
+step "5.1 题目2 知识矩阵几何与 HTTP API 单测"
+(cd "${REPO_ROOT}" && PYTHONPATH="${REPO_ROOT}/cpp" "${PYTHON}" -m unittest discover \
+  -s "${SCRIPT_DIR}" -p 'test_q2_matrix*.py')
+check $? "test_q2_matrix"
+
+if [[ "${UI}" -eq 1 ]]; then
+  step "5.2 题目2 界面真浏览器端到端测试"
+  if command -v node >/dev/null 2>&1; then
+    node "${SCRIPT_DIR}/q2_ui_e2e_test.js" --port 8071
+    check $? "q2_ui_e2e_test.js"
+  else
+    printf '  [SKIP] 没有 node，跳过界面端到端测试\n'
+  fi
+fi
 
 if [[ "${ONLINE}" -eq 1 ]]; then
   step "6. 线上连通性预检（login-jammers CLI -> 平台）"
