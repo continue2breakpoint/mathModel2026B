@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
-"""线上"演练/练习测试"全流程（不依赖官方 Windows 客户端）。
+"""线上演练测试入口：真实 robot API（默认）与本地 mock（``--mock``）两种模式。
 
-为什么可以这样做
-----------------
-逆向结果（``login-jammers/analysis/typedump/types_all.txt``）表明练习测试的
-**案例是在客户端本地生成的**——``/api/v1/practice-tests/authorize`` 返回的票据里
-只有队伍/设备/构建身份字段，没有任何案例数据。服务器收到的只有客户端事后上报的
-统计值（``/api/v1/practice-tests/statistics``）。当前 ``/api/v1/status`` 还显示
-``practice_summary_upload_enabled=false``，因此行为包也不必上传。
+真实模式（默认，不启动 mock）
+----------------------------
+``login-jammers`` 负责平台登录；官方 ``jammers-simulator.exe`` 在客户端里开始一次
+练习/正式测试后，会在 ``127.0.0.1:<robot_port>`` 打开 ``robot-protocol-v1`` 的
+robot API。本脚本默认直接连接该端口，不主动 login/authorize/statistics，避免与
+官方客户端已有会话冲突；统计上报由官方客户端负责。
 
-于是整条链路是：
+端口默认读取 ``JAMMERS_ROBOT_PORT``（与 ``login-jammers/linux-client/python/
+jammers_robot.py`` 一致，缺省 2026），也可用 ``--robot-port`` 或 ``--base-url``
+覆盖。端口未开时 ``run_once`` 会返回 ``gated``，这是正常门控行为。
 
-    1. login                                   （会话 + device_digest）
-    2. authorize  -> practice_ticket           （签发给本队的练习票据）
-    3. 本地跑案例（本脚本用 framework 的 mock world + 我们的 Q3 策略），
-       并且**把 robot API 挂在真实的 127.0.0.1:2026 端口上**，
-       策略侧走的是与线上完全相同的 ``--mode live`` 代码路径
-    4. statistics -> 把这一场的统计值上报
-
-> ⚠️ 物理不是官方的：第 3 步的模拟核心是我们自己的 ``mock.world``，
-> 官方 ``internal/simcore`` 仍在 ``jammers-simulator.exe`` 里。
-> **因此这条链路的产物只能证明"线上接口链路通"，不能当作官方演练成绩使用。**
-> 正式测试（``formal-tests/*``）的赛题包是服务器加密下发的，必须有官方客户端才能解密。
+模拟模式（``--mock``）
+----------------------
+用于没有官方 Windows 客户端时验证登录 / authorize / robot-protocol-v1 / live
+数据面形状：授权拿练习票据后，在 ``127.0.0.1:<robot_port>`` 临时启动
+``framework.mock.server.MockSimulator``，再用 ``--mode live`` 跑策略。
+**物理不是官方 simcore，结果不能当作真实演练成绩或正式测试成绩。**
 
 用法::
 
-    python3 script/run_practice_online.py --seed 11 --submit
-    python3 script/run_practice_online.py --seed 11            # 只 authorize + 本地跑，不上报
+    # 真实线上：先在官方客户端里开始练习测试，再运行
+    python3 script/run_practice_online.py --strategy matrix
+
+    # 模拟链路自测（临时起 mock 占住 2026）
+    python3 script/run_practice_online.py --mock --strategy matrix --seed 11
 """
 
 from __future__ import annotations
@@ -35,6 +34,7 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -45,7 +45,6 @@ sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(REPO_ROOT / "framework" / "src"))
 
 from jammers_paths import resolve  # noqa: E402
-from mathmodel2026b.mock.server import MockSimulator  # noqa: E402
 from mathmodel2026b.runner import RunConfig, run_once  # noqa: E402
 from run import build_strategy_params, make_strategy_factory  # noqa: E402
 
@@ -53,7 +52,8 @@ SCENARIO_SCHEMA_VERSION = "scenario-v1"
 RULESET_VERSION = "rules-v1"
 PACKAGE_ENVELOPE_VERSION = 1
 STATISTICS_SCHEMA_VERSION = "practice-run-statistics-v1"
-DEFAULT_ROBOT_PORT = 2026
+DEFAULT_ROBOT_PORT = int(os.environ.get("JAMMERS_ROBOT_PORT", "2026"))
+DEFAULT_ROBOT_URL = f"http://127.0.0.1:{DEFAULT_ROBOT_PORT}"
 
 
 def b64u_nopad(raw: bytes) -> str:
@@ -82,31 +82,10 @@ def decode_ticket(ticket_b64: str) -> dict:
     }
 
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="线上演练测试全流程")
-    ap.add_argument("--problem", type=int, default=3, choices=[3, 4])
-    ap.add_argument("--seed", type=int, default=11, help="本地案例种子")
-    ap.add_argument("--n-jammers", type=int, default=None)
-    ap.add_argument("--directional", action="store_true", help="问题4：含定向源")
-    ap.add_argument(
-        "--strategy",
-        choices=["q3", "matrix"],
-        default="q3",
-        help="q3=旧 Q3Strategy；matrix=知识矩阵 KnowledgeSearchStrategy",
-    )
-    ap.add_argument("--keep-session", action="store_true",
-                    help="演练结束后不调用 logout（默认会退出设备会话）")
-    ap.add_argument("--robot-port", type=int, default=DEFAULT_ROBOT_PORT)
-    ap.add_argument("--submit", action="store_true", help="上报 statistics（默认只本地跑）")
-    ap.add_argument("--case-code", default=None, help="覆盖上报用的 case_code")
-    ap.add_argument("--ticket-sha", choices=["raw", "b64"], default="raw",
-                    help="practice_ticket_sha256 取票据原始字节还是 base64 串的 sha256")
-    ap.add_argument("--login-jammers", default=None)
-    ap.add_argument("--param", action="append", default=[], metavar="KEY=VALUE")
-    ap.add_argument("--report", default=None, help="结果 JSON 落盘路径")
-    args = ap.parse_args(argv)
+def _run_mock_mode(args, paths, team_no: str, cfg: dict, report: dict) -> tuple:
+    """接口自测模式：authorize -> 本地 MockSimulator -> live 策略路径 -> 可选 statistics。"""
+    from mathmodel2026b.mock.server import MockSimulator  # 延迟导入：真实模式不需要
 
-    paths = resolve(args.login_jammers, None)
     sys.path.insert(0, str(paths.root / "linux-client" / "python"))
     from jammers_auth import (  # noqa: E402
         CLIENT_VERSION,
@@ -117,10 +96,6 @@ def main(argv: list[str] | None = None) -> int:
     from cryptography.hazmat.primitives import serialization  # noqa: E402
     from cryptography.hazmat.primitives.asymmetric import ed25519  # noqa: E402
 
-    cfg = json.loads(Path(paths.default_config).read_text(encoding="utf-8"))
-    team_no = cfg["team_no"]
-
-    report: dict = {"started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     client = JammersClient(timeout=25.0)
     st = client.status()
     report["server_status"] = st
@@ -157,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     except JammersError as exc:
         print(f"[online] authorize FAILED: HTTP {exc.status} {exc.code}: {exc.message}")
-        return 2
+        return None, client, None, None, 2
     ticket_b64 = auth_resp["practice_ticket_b64"]
     ticket = decode_ticket(ticket_b64)
     report["authorize"] = {
@@ -185,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         port=args.robot_port,
     )
     sim.start()
-    print(f"[online] robot API (本地 simcore) -> {sim.base_url}")
+    print(f"[online] robot API (本地 mock) -> {sim.base_url}")
     try:
         outcome = run_once(
             RunConfig(
@@ -200,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
                     "practice_ticket_nonce": ticket["claims"]["authorization_nonce_b64"],
                     "strategy": args.strategy,
                     "directional": args.directional,
+                    "simulated_simcore": True,
                 },
                 strategy_factory=strategy_factory,
             )
@@ -229,7 +205,8 @@ def main(argv: list[str] | None = None) -> int:
         ),
         "problem_no": args.problem,
         "practice_run_no": 1,
-        "case_code": args.case_code or f"local-{args.seed:04d}-{ticket['claims']['authorization_nonce_b64'][:8]}",
+        "case_code": args.case_code
+        or f"local-{args.seed:04d}-{ticket['claims']['authorization_nonce_b64'][:8]}",
         "entered": True,
         "end_reason": "user_exit",
         "cleared_jammer_count": int(outcome.metrics["cleared_count"]),
@@ -259,14 +236,121 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("[online] 未上报（加 --submit 才会调用 statistics）")
 
-    if not args.keep_session:
-        try:
-            client.logout()
-            report["logout"] = "ok"
-            print("[online] logout ok")
-        except Exception as exc:  # noqa: BLE001 - 清理失败不应覆盖演练结论
-            report["logout"] = f"{type(exc).__name__}: {exc}"
-            print(f"[online] logout failed: {type(exc).__name__}: {exc}")
+    return outcome, client, ticket, truth, 0
+
+
+def _run_real_mode(args, paths, team_no: str, report: dict, params, strategy_factory) -> tuple:
+    """真实模式：不启动 mock，直接连接官方客户端打开的 robot API。"""
+    base_url = args.base_url or f"http://127.0.0.1:{args.robot_port}"
+    report["real_robot_url"] = base_url
+    print(f"[online] strategy={args.strategy}")
+    print(f"[online] real robot API (官方客户端) -> {base_url}")
+    if args.submit:
+        print("[online] 真实模式不主动上报 statistics；统计由官方客户端负责。")
+
+    outcome = run_once(
+        RunConfig(
+            robot_id=team_no,
+            seed=args.seed,
+            mode="live",
+            base_url=base_url,
+            params=params,
+            tag="online-practice",
+            write_trace=False,
+            notes={
+                "strategy": args.strategy,
+                "directional": args.directional,
+                "simulated_simcore": False,
+            },
+            strategy_factory=strategy_factory,
+        )
+    )
+    metrics = outcome.metrics or {}
+    total = metrics.get("n_jammers")
+    total_text = str(total) if total is not None else "?"
+    report["run"] = {
+        "run_id": outcome.run_id,
+        "status": outcome.status,
+        "error": outcome.error,
+        "metrics": metrics,
+        "ground_truth": None,
+    }
+    print(f"[online] run {outcome.run_id} status={outcome.status} "
+          f"cleared={metrics.get('cleared_count')}/{total_text} "
+          f"virtual_s={metrics.get('virtual_time_s')} "
+          f"wall_s={metrics.get('wall_s'):.2f}")
+    return outcome, None, None, None, 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="线上演练：真实 robot API（默认）或 --mock 自测")
+    ap.add_argument("--problem", type=int, default=3, choices=[3, 4])
+    ap.add_argument("--seed", type=int, default=11, help="仅 --mock 使用：本地案例种子")
+    ap.add_argument("--n-jammers", type=int, default=None, help="仅 --mock 使用")
+    ap.add_argument("--directional", action="store_true", help="问题4：含定向源")
+    ap.add_argument(
+        "--strategy",
+        choices=["q3", "matrix"],
+        default="q3",
+        help="q3=旧 Q3Strategy；matrix=知识矩阵 KnowledgeSearchStrategy",
+    )
+    ap.add_argument(
+        "--mock",
+        action="store_true",
+        help="临时启动本地 MockSimulator 做接口自测；真实线上演练不要加此参数",
+    )
+    ap.add_argument("--keep-session", action="store_true",
+                    help="仅 --mock：结束后不调用 logout")
+    ap.add_argument(
+        "--robot-port",
+        type=int,
+        default=DEFAULT_ROBOT_PORT,
+        help=f"官方 robot API 端口（默认 JAMMERS_ROBOT_PORT={DEFAULT_ROBOT_PORT}）",
+    )
+    ap.add_argument("--base-url", default=None, help="覆盖真实 robot API 的完整地址")
+    ap.add_argument("--submit", action="store_true",
+                    help="仅 --mock：上报 statistics；真实模式由官方客户端上报")
+    ap.add_argument("--case-code", default=None, help="仅 --mock：覆盖统计上报的 case_code")
+    ap.add_argument("--ticket-sha", choices=["raw", "b64"], default="raw",
+                    help="仅 --mock：practice_ticket_sha256 取原始字节还是 base64 串")
+    ap.add_argument("--login-jammers", default=None)
+    ap.add_argument("--param", action="append", default=[], metavar="KEY=VALUE")
+    ap.add_argument("--report", default=None, help="结果 JSON 落盘路径")
+    args = ap.parse_args(argv)
+
+    paths = resolve(args.login_jammers, None)
+    cfg = json.loads(Path(paths.default_config).read_text(encoding="utf-8"))
+    team_no = cfg["team_no"]
+
+    params = build_strategy_params(args.strategy, args.directional, args.param)
+    strategy_factory = make_strategy_factory(args.strategy, args.directional)
+
+    report: dict = {"started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    exit_code = 0
+    client = None
+    outcome = None
+    ticket = None
+
+    if args.mock:
+        outcome, client, ticket, truth, exit_code = _run_mock_mode(
+            args, paths, team_no, cfg, report
+        )
+        if exit_code:
+            return exit_code
+        if not args.keep_session:
+            try:
+                client.logout()
+                report["logout"] = "ok"
+                print("[online] logout ok")
+            except Exception as exc:  # noqa: BLE001 - 清理失败不应覆盖演练结论
+                report["logout"] = f"{type(exc).__name__}: {exc}"
+                print(f"[online] logout failed: {type(exc).__name__}: {exc}")
+    else:
+        outcome, _client, _ticket, _truth, exit_code = _run_real_mode(
+            args, paths, team_no, report, params, strategy_factory
+        )
+        if exit_code:
+            return exit_code
 
     report["finished_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     out = Path(args.report) if args.report else (
@@ -276,7 +360,7 @@ def main(argv: list[str] | None = None) -> int:
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str) + "\n",
                    encoding="utf-8")
     print(f"[online] 报告写入 {out}")
-    return 0
+    return 1 if (outcome is not None and outcome.status != "ok") else 0
 
 
 if __name__ == "__main__":

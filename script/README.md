@@ -71,7 +71,7 @@ pip install -e 'framework[dev]'
 | `preflight.py` | 线上腿预检：`status` → `login` → `presence` → `renew`（经 login-jammers CLI） |
 | `probe_practice.py` | 线上**练习测试 authorize 探针**：拿到 `practice_ticket_b64` 并解出票据 claims |
 | `probe_practice_variants.py` | 请求体变体对照表，区分"请求字段不正确"与"请求内容不正确" |
-| `run_practice_online.py` | **线上演练全流程**：login → authorize → 本地跑（robot API 挂真实 2026 端口）→ 可选 statistics |
+| `run_practice_online.py` | **线上演练入口**：默认连接官方客户端 robot API（端口取 `JAMMERS_ROBOT_PORT`）；加 `--mock` 时才启动本地 MockSimulator 做接口自测 |
 | `run.py` | 跑 **一次** 问题3 策略（`--mode mock` 离线 / `--mode live` 连真实 robot 端口） |
 | `run_batch.py` | 参数网格 × 随机案例的批量调参，产出 `logs/results.jsonl` 与批次摘要 |
 | `q3_time_audit.py` | **虚拟时间审计**：按决策类别（扫描/逼近/清除）拆路程与时间占比 |
@@ -230,7 +230,7 @@ client = ReplayClient.from_jsonl("logs/runs/<run_id>/run.jsonl")
 
 ### 6.1 自测 live 通路（不需要 Windows 客户端）
 
-把 mock 单独起在真实的 robot 端口上，就能完整演练"客户端在 2026 端口后面"的场景
+把 mock 单独起在真实的 robot 端口上（默认 `JAMMERS_ROBOT_PORT=2026`），就能完整演练"官方客户端在 robot 端口后面"的场景
 ——这也正是"客户端做端口映射把 robot 暴露给线上平台"时的数据面形状：
 
 ```bash

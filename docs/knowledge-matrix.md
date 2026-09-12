@@ -287,7 +287,7 @@ d(s, P_c) ≤ R̂_c − margin          （已收到信号的频道：停点还�
 | `lateral` | 134 m | 2465 m | 横向补测（绝大多数出现在定向场景） |
 | `sweep` / `last-resort` | ~0 | ~880 m | 收尾与兜底 |
 
-### 线上接口演练 vs 本地 mock（seed 11，2026-09-12）
+### 模拟链路接口演练 vs 本地 mock（seed 11，2026-09-12）
 
 > **限定**：当前环境没有官方 `jammers-simulator.exe`，因此
 > `run_practice_online.py` 在通过平台 `authorize` 后，把 robot API 挂在自己的
@@ -298,8 +298,10 @@ d(s, P_c) ≤ R̂_c − margin          （已收到信号的频道：停点还�
 命令（默认不上报 statistics，演练结束自动 logout）：
 
 ```bash
-python3 script/run_practice_online.py --strategy q3     --seed 11 --report logs/online_q3_seed11.json
-python3 script/run_practice_online.py --strategy matrix --seed 11 --report logs/online_matrix_seed11.json
+# --mock：在 127.0.0.1:<robot_port> 上临时启动 MockSimulator；不加 --mock 时
+# run_practice_online.py 默认连接官方客户端打开的 robot API。
+python3 script/run_practice_online.py --mock --strategy q3     --seed 11 --report logs/online_q3_seed11.json
+python3 script/run_practice_online.py --mock --strategy matrix --seed 11 --report logs/online_matrix_seed11.json
 ```
 
 | 指标（seed 11，13 个源全清） | `Q3Strategy`（main，mock / live 路径） | `KnowledgeSearchStrategy`（mock / live 路径） |
@@ -313,8 +315,13 @@ python3 script/run_practice_online.py --strategy matrix --seed 11 --report logs/
 结论：矩阵策略的 **live 代码路径与本地 mock 在上表指标上一致**（同一份
 `KnowledgeSearchStrategy` + 同一 seed 的案例），seed 11 上相对 main 的旧策略在虚拟时间、
 平均定位清除时间和检测次数上均更优；30 seed 的总体中位数见 §7（旧策略在总路程/总时间上
-仍略好，矩阵策略的优势是完备性证书、负例利用和检测次数）。因此满足"线上演练符合 mock
-→ 可合并"的判据；正式测试前仍需在官方模拟器上复测。
+仍略好，矩阵策略的优势是完备性证书、负例利用和检测次数）。
+
+但必须强调：上面是**模拟链路**验证，不是官方 simcore 的真实线上演练。真实线上演练应先在
+官方客户端里开始练习测试，再运行 `script/run_practice_online.py`（不加 `--mock`）或
+`script/run.py --mode live`；端口默认取 `JAMMERS_ROBOT_PORT`，与
+`login-jammers/linux-client/python/jammers_robot.py` 保持一致。正式测试前仍需在官方
+模拟器上复测。
 
 > 口径提醒：`move_distance_m` 没有放进上表。`run_once` 在 mock 模式取
 > `world.summary()` 的权威距离，在 live 模式只能取策略侧 `DogState.move_distance_m`

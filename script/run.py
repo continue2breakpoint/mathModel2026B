@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -43,7 +44,8 @@ STRATEGY_CHOICES = ("q3", "matrix")
 #: 提交代码时隐去队号，改为命令行参数/配置文件提供。
 PLACEHOLDER_TEAM_NO = "000000000000"
 
-DEFAULT_ROBOT_URL = "http://127.0.0.1:2026"
+DEFAULT_ROBOT_PORT = int(os.environ.get("JAMMERS_ROBOT_PORT", "2026"))
+DEFAULT_ROBOT_URL = f"http://127.0.0.1:{DEFAULT_ROBOT_PORT}"
 
 
 def coerce(value: str):

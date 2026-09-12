@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -43,6 +44,7 @@ from jammers_paths import (  # noqa: E402
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 LOG_ROOT = REPO_ROOT / "logs"
+DEFAULT_ROBOT_PORT = int(os.environ.get("JAMMERS_ROBOT_PORT", "2026"))
 PREFLIGHT_DIR = LOG_ROOT / "preflight"
 PREFLIGHT_INDEX = LOG_ROOT / "preflight.jsonl"
 
@@ -139,7 +141,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--session-file", default=None)
     parser.add_argument("--no-login", action="store_true", help="只做 status 与端口探测")
     parser.add_argument("--skip-renew", action="store_true")
-    parser.add_argument("--robot-port", type=int, default=2026)
+    parser.add_argument(
+        "--robot-port",
+        type=int,
+        default=DEFAULT_ROBOT_PORT,
+        help=f"robot API 端口（默认 JAMMERS_ROBOT_PORT={DEFAULT_ROBOT_PORT}）",
+    )
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--log-root", default=None)
     args = parser.parse_args(argv)
