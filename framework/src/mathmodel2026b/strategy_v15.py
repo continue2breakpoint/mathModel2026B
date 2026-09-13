@@ -121,6 +121,25 @@ class Q3V15Strategy(Q3V8Strategy):
         return total
 
     def _two_opt(self, start, route):
+        """2-opt（父类）+ or-opt（搬移长度 1~3 的连续片段）。
+
+        ⚠️ 修正记录（2026-09-13 独立复核 + 本仓库隔离实验）
+        ---------------------------------------------------
+        原实现把候选路线 ``cand``（片段**插回后**的路线）与 ``rest``（片段
+        **删除后**的短路线）比较::
+
+            base = self._path_len(start, rest)          # ← 错的基准
+            if self._path_len(start, cand) < base - 1e-9:
+
+        欧氏距离满足三角不等式，删点只会让路线变短或不变、插点只会变长或不变，
+        故 ``len(cand) >= len(rest)`` 恒成立 —— 这个判据**几乎不可能接受任何动作**，
+        or-opt 等于空转（``v15`` 相对 ``v8`` 的净收益只能归因于 ``no_signal``
+        排除区，不能归因于 or-opt）。正确的基准是**本轮搬移前的完整 route**。
+
+        修正后（``or_opt_passes`` > 0 时）种子 61–160 实测：仍 100/100 局全清，
+        逐局平均源耗时中位 279.88 → 273.07 s/源，配对总时间平均 −30.89 s/局
+        （36 局变快、15 局变慢，非逐案支配）。见 ``docs/review-fixes-2026-09-13.md``。
+        """
         route = super(Q3V15Strategy, self)._two_opt(start, route)
         for _ in range(self.params.or_opt_passes):
             improved = False
@@ -131,7 +150,7 @@ class Q3V15Strategy(Q3V8Strategy):
                     rest = route[:i] + route[i + seg :]
                     if not rest:
                         continue
-                    base = self._path_len(start, rest)
+                    base = self._path_len(start, route)  # 搬移前的完整路线
                     for k in range(len(rest) + 1):
                         cand = rest[:k] + piece + rest[k:]
                         if self._path_len(start, cand) < base - 1e-9:

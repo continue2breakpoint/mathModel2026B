@@ -7,10 +7,16 @@
 ``state``          机器狗 / 逐频道状态与计数
 ``client``         模拟器通信（HTTP / 记录装饰器 / 回放）
 ``strategy``       可插拔策略（问题3 实现见 :class:`Q3Strategy`）
-``strategy_v5``…``strategy_v15``
-                   问题3/4 的历代策略（版本谱系见 ``docs/q34-version-lineage.md``）
+``strategy_v5``…``strategy_v18``
+                   问题3/4 的历代策略（版本谱系见 ``docs/q34-version-lineage.md``）；
+                   ``v18`` 是当前交付版（问题3/4 通用）
+``knowledge_layer``
+                   知识矩阵接入 v14/v17/v18 的适配层：失败清除的 20m 排除圆 +
+                   **可证明的覆盖式清除**（25m 格铺满保守可行域）
 ``versioned``      **决策方法注册表**：把历代策略登记成可选决策方法
                    （``script/list_methods.py`` 与 ``script/run.py --strategy`` 共用）
+``strategy_matrix``/``knowledge``
+                   另一条独立路线：``channel × path`` 观测台账 + 在线覆盖证书
 ``runner``         一次完整运行的编排 + 结构化日志
 ``mock``           离线 mock 模拟器（无 Windows 客户端时验证工作流）
 ``logging_utils``  JSONL 日志格式与索引
@@ -120,4 +126,4 @@ __all__ = [
     "summarize_index",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

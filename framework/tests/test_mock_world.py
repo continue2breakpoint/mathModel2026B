@@ -59,7 +59,11 @@ def _world(jammer: Jammer, **kwargs) -> World:
 
 
 def test_timing_model_matches_appendix() -> None:
-    """附录2：移动 5m/s、切频道 1s、测向 5s、光学 3s + 激光 2s。"""
+    """附录2：移动 5m/s、切频道 1s、测向 5s、光学 3s + 激光 2s。
+
+    附件1 §2.3 还规定：``/clear`` **未发现**只花光学定位的 3s，**已清除**才再花
+    2s 激光；且 ``/clear`` 的频道参数只是"目标源频道"，**不切换**测向机频道。
+    """
     jammer = Jammer(channel=1, position=Point(1000.0, 0.0), effective_radius_m=1200.0)
     world = _world(jammer)
     world.enter()
@@ -73,9 +77,53 @@ def test_timing_model_matches_appendix() -> None:
     world.measure(Point(10.0, 0.0), 2)  # 切频道 1s + 测 5s
     assert world.virtual_time_s == pytest.approx(18.0)
 
-    world.clear(Point(10.0, 0.0), 2)  # 光学 3s + 激光 2s
-    assert world.virtual_time_s == pytest.approx(23.0)
+    world.clear(Point(10.0, 0.0), 2)  # 频道2 无源 → 未发现，只花 3s
+    assert world.virtual_time_s == pytest.approx(21.0)
+    # /clear 不切换测向机频道：切频道计数仍是 1（只有上面那次 /measure 2）
     assert world.channel_switch_count == 1
+    assert world.channel == 2
+
+    # 走到源附近（990m = 198s），命中 → 3s + 2s = 5s
+    world.clear(Point(1000.0, 0.0), 1)
+    assert world.virtual_time_s == pytest.approx(21.0 + 198.0 + 5.0)
+    assert world.cleared == {1}
+
+    # 同一源再清一次 → 未发现，3s（同一干扰源只能被清除一次）
+    before = world.virtual_time_s
+    world.clear(Point(1000.0, 0.0), 1)
+    assert world.virtual_time_s == pytest.approx(before + 3.0)
+
+
+def test_legacy_clear_timing_reproduces_pre_fix_numbers() -> None:
+    """旧 mock 对**所有** ``/clear`` 一律收 3+2=5s。
+
+    归档的基准数字（2026-09-13 之前）都是这个口径，因此保留一个显式开关来复现：
+    同一动作轨迹满足 ``T_legacy = T_correct + 2 × N_clear_failure``。
+    """
+    jammer = Jammer(channel=1, position=Point(1000.0, 0.0), effective_radius_m=1200.0)
+    for legacy in (False, True):
+        world = _world(jammer, legacy_clear_timing=legacy)
+        world.enter()
+        world.clear(Point(0.0, 0.0), 1)     # 距源 1000m > 20m → 未发现
+        world.clear(Point(0.0, 0.0), 2)     # 频道2 无源 → 未发现
+        world.clear(Point(1000.0, 0.0), 1)  # 命中
+        expected = 1000.0 / 5.0 + (5.0 + 5.0 + 5.0 if legacy else 3.0 + 3.0 + 5.0)
+        assert world.virtual_time_s == pytest.approx(expected), f"legacy={legacy}"
+    assert world.cleared == {1}
+
+
+def test_legacy_and_correct_timing_differ_by_two_seconds_per_failed_clear() -> None:
+    """口径换算：``T_legacy − T_correct = 2 × N_failure``。"""
+    jammer = Jammer(channel=3, position=Point(0.0, 900.0), effective_radius_m=1200.0)
+    totals = []
+    for legacy in (False, True):
+        world = _world(jammer, legacy_clear_timing=legacy)
+        world.enter()
+        for _ in range(4):
+            world.clear(Point(0.0, 0.0), 3)  # 900m > 20m → 全部未发现
+        world.clear(Point(0.0, 900.0), 3)
+        totals.append(world.virtual_time_s)
+    assert totals[1] - totals[0] == pytest.approx(2.0 * 4)
 
 
 def test_no_signal_beyond_effective_radius() -> None:

@@ -229,6 +229,7 @@ class MockSimulator:
         gated: bool = False,
         verbose: bool = False,
         clear_requires_switch: bool = False,
+        legacy_clear_timing: bool = False,
     ) -> None:
         resolved = case if case is not None else generate_case(
             seed, n_jammers=n_jammers, omni_only=omni_only
@@ -237,6 +238,7 @@ class MockSimulator:
             case=resolved,
             robot_id=robot_id,
             clear_requires_switch=clear_requires_switch,
+            legacy_clear_timing=legacy_clear_timing,
         )
         self.gated = gated
         self.verbose = verbose

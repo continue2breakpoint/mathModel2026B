@@ -304,6 +304,21 @@ class Q3Strategy(Strategy):
         circle = self._clear_circle(ch_state)
         return circle is not None
 
+    def _after_direct_clear_failed(
+        self, client: SimulatorClient, state: DogState, channel: int
+    ) -> bool:
+        """**扩展点**：走到估计点直接清失败、补了一条读数之后的介入机会。
+
+        返回 ``True`` 表示"源已被清掉"，调用方会立即结束本次精定位。
+
+        默认实现是空操作（返回 ``False``），因此对 v8/v15/v14/v17 的行为
+        **逐位无影响**。v18 用它插入"可证明的覆盖式清除"：
+        直接清失败时可行域往往已经缩到"两三个 20m 圆就能盖住"，此时
+        一次覆盖计划（3k+2 秒）比"再走一趟补读数 + 再清一次"更便宜，而且带保证。
+        见 :mod:`mathmodel2026b.knowledge_layer` 的代价判据。
+        """
+        return False
+
     def _clear_circle(
         self, ch_state: ChannelState, tolerance_m: float | None = None
     ) -> Circle | None:

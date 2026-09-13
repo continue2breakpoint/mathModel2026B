@@ -299,3 +299,178 @@ ok run=..._live-online_45c523 cleared=16/None avg_s=543.4 virtual_s=8694.8
 4. `python3 script/report.py --tag practice-N` —— 看清除率与平均定位清除时间。
 5. 用 `ReplayClient` 重放这一场的 `run.jsonl`，确认本地逻辑与线上一致，
    再去点"开始正式测试"（正式测试只有 3 次机会）。
+
+## 7. 问题3/4 的基准 · 验收 · 官方演练
+
+这三个脚本是**唯一**的问题3/4 评估入口（原先散在 `_bench_v5.py` / `_ab_q4_v17.py` /
+`_bench_ab.py` / `_bench_paper_q4.py` / `_bench_versions.py` / `最终验收_问题34.py` /
+`官方演练_问题34.py` 里，各写一份 import 与交付参数）。共同约定：
+
+* **策略一律来自注册表**。用 `mathmodel2026b.versioned` 的
+  `build_method(key, **overrides)` 构造，交付参数覆盖（`schedule_min_readings`、
+  `or_opt_passes` …）必然生效；脚本里**不再出现**任何参数默认值，
+  只有命令行显式给的 `--param` 覆盖。
+* **臂名就是注册表键**：`q3`/`matrix`/`q3-v5`…/`q3-v18`/`q4-v8`/`q4-v9`/`q4-v14`/
+  `q4-v17`/`q4-v18`/`paper-q4`；`python3 script/list_methods.py` 看全部口径。
+* **计时口径可切换**：默认按附件1 §2.3（未发现 `/clear` 3s、已清除 5s）；
+  `--legacy-timing` 用旧 mock 口径（失败的 `/clear` 也按 5s）复现
+  2026-09-13 之前的归档数字（两者满足 `T_legacy = T_correct + 2×失败清除次数`）。
+
+### 7.1 `bench_q34.py` —— 统一 A/B 基准
+
+```bash
+# 问题3（全向）：注册表里的当前最终交付 + 历代交付 / 路线A / 基线
+python3 script/bench_q34.py --mode omni --seeds 1-30
+
+# 问题4（全向+定向混合）
+python3 script/bench_q34.py --mode dir --seeds 1-30
+
+# 只比两代 / 持有集 / 全定向压力场景 / 复现归档数字
+python3 script/bench_q34.py --mode dir --seeds 1-10 --arms q4-v18,q4-v17
+python3 script/bench_q34.py --mode dir --seeds 61-160 --n-directional 16
+python3 script/bench_q34.py --mode omni --seeds 1-30 --legacy-timing
+
+# 列出全部可选臂（含"负结果/不适用"标注）
+python3 script/bench_q34.py --list
+```
+
+默认臂 = 该问题在注册表里的**当前最终交付** + `BASE_ARMS` 里的历代交付/路线入口/对照
+（所以注册表换交付版时，表头自动跟上，不必改脚本）。`--param KEY=VALUE` 对**所有**臂生效，
+用于消融；`--repeat N` 把每个 (臂, 种子) 重复 N 局。
+
+每个臂输出：全清**种子**数/总数、清除源数/总源数、`average_clear_time_s` 的中位与均值、
+`virtual_time_s` 中位、`move_distance_m` 中位、墙钟中位；结果写
+`logs/bench/<mode>_<arms>_<start>_<end>.json`（含逐例明细与
+`diagnostics.params.as_dict()`）与同名 `.txt`（表格）。
+
+### 7.2 `acceptance_q34.py` —— 最终模拟测试（验收）
+
+```bash
+python3 script/acceptance_q34.py                       # 种子 1-5，Q3 + Q4 + Q4 对照臂
+python3 script/acceptance_q34.py --seeds 6-10
+python3 script/acceptance_q34.py --seeds 1-5 --no-baseline
+python3 script/acceptance_q34.py --out 验收_20260913.txt
+python3 script/acceptance_q34.py --seeds 1-5 --legacy-timing
+```
+
+默认臂：问题3 = `q3-v15`（`--q3-arm`）、问题4 = `q4-v18`（`--q4-arm`）、
+对照臂 = `q4-v17`（`--baseline-arm`）。输出逐局明细 + 小结 + 与大规模基准的对照 +
+结论；文本写到 `--out`（默认工作目录下的 `最终验收_问题34_结果.txt`）。
+若注册表已经改认了别的"最终交付"（例如问题3 的 `q3-v18`），对应段落会打印一条
+`⚠` 漂移提示并给出切换开关；每段方括号里显示该臂在注册表里的真实状态。
+
+### 7.3 `official_drill_q34.py` —— 官方模拟器演练
+
+```bash
+# 问题3、4 各 5 局；每局都要在官方 GUI 里点【演练测试】→【开始】
+python3 script/official_drill_q34.py
+
+# 先验证链路 / 只演练一题 / 指定队号与端口
+python3 script/official_drill_q34.py --repeat 1 --problem 3
+python3 script/official_drill_q34.py --problem 4 --repeat 3 --robot-id <队号>
+JAMMERS_ROBOT_PORT=2026 python3 script/official_drill_q34.py
+
+# 没有官方模拟器时：用本地 mock 走完全同一条流程（含预算标定 / 计数 / 落盘）
+python3 script/official_drill_q34.py --dry-run --repeat 1
+
+# 端口关闭时只探一次、立刻给出中文排查清单
+python3 script/official_drill_q34.py --wait-s 0
+```
+
+对接官方 `robot-protocol-v1`（默认 `http://127.0.0.1:2026`，端口取环境变量
+`JAMMERS_ROBOT_PORT`，未设置 = 2026）。流程：轮询 `/enter` 等你点开始 →
+用**注册表里的当前最终交付臂**（`final=True` 那一条，目前问题3 = `q3-v18`、
+问题4 = `q4-v18`；注册表没有 `final` 时退回 `q3-v15`/`q4-v18`）跑完整局 → `/exit` →
+读模拟器落盘的 `*.result.json` 取**官方真值**（源数 / 定向源数 / 案例编码），
+并**校验这一局开的确实是问题3/4**（点错入口会当场告警，且不给"全清"结论）。
+队号沿用 `run.py` 的口径（`--robot-id` / `JAMMERS_TEAM_NO` / login-jammers 配置），
+真值目录用 `--data-dir`（默认环境变量 `JAMMERS_SIM_DATA_DIR`，未设置则自动探测
+`JammersSimulatorData/behavior-logs`）。墙钟预算按 `/enter` 返回的
+`remaining_real_duration_s − 30s` 标定，**不写死 1200s**。`--legacy-timing` 只对
+`--dry-run` 有意义（官方计时由官方实现决定）。
+
+---
+
+
+### 7.4 ⚠️ 官方真值目录：模拟器跑在 Windows VM 时必须手工取
+
+`--data-dir` 指向官方落盘真值的 `*.result.json` 目录。**当模拟器跑在 Windows 虚拟机里
+（本仓库的现行拓扑：VM `192.168.122.161` + `portrelay`），这个目录在宿主机上不存在**，
+自动探测会失败（可能命中工作区里一份过时的快照副本），于是结果行显示
+`清除 15/? ?（拿不到官方源数）`、小结里"全清 0/1 局"。
+
+**这时的清除数与虚拟时间是可信的**（来自 `/enter` 之后的真实动作流水），**只有
+"源总数 / 定向源数 / 案例编码"拿不到**。真值在 VM 内：
+
+```
+C:\zW<U+200C>indowsUtility\Jammers-simulator-full\JammersSimulatorData\behavior-logs\
+    practice-p4-<run_no>-<CASE-CODE>.result.json
+```
+
+（注意路径里有一个**零宽非连接符** U+200C，用 `C:\zW*indowsUtility\...` 通配最省事。）
+
+取回方式（WinRM，见 `docs/robot-link-windows-vm.md` §4.4；工作区 `_probe2026/` 有现成助手）：
+
+```bash
+cd _probe2026
+python3 wr.py ps 'Get-ChildItem "C:\zW*indowsUtility\Jammers-simulator-full\JammersSimulatorData\behavior-logs\*.result.json" | Sort-Object LastWriteTime -Descending | Select-Object -First 4 | ForEach-Object { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($_.Name + "||" + (Get-Content $_.FullName -Raw))) }'
+```
+
+输出是 base64（避免 PS 5.1 代码页把中文/路径弄乱），在 Linux 侧解码即得
+`{"problem_no":4,...,"jammer_count":15,"directional_jammer_count":11}`。
+把该目录挂到宿主机（SMB / `--data-dir`），脚本就能自动读真值并给出"全清"结论。
+
+2026-09-13 14:19–14:23 的两局真值已按此取回并归档在
+`docs/data/official-drill-20260913-1420-q18.json`。
+
+---
+
+## 8. 问题3/4 的持有集审计与消融
+
+`## 7` 的三个脚本回答"最终版跑多少分"；本节的两个脚本回答
+**"凭什么是这个最终版、它在没调过参的案例上还行不行"**。它们的出现是因为
+2026-09-13 的独立复核发现：在调参用过的种子上全清**不等于**全清 ——
+`q4-v17` 在种子 1–60 上 760/760，却在未参与调参的 61–160 上只有 97/100
+（`docs/review-fixes-2026-09-13.md`）。
+
+### 8.1 `script/audit_q34.py` —— 持有集审计 / 逐层消融
+
+```bash
+# 持有集：种子 61-160，混合与全定向压力场景
+python3 script/audit_q34.py --mode mixed           --arms all --seeds 61-160
+python3 script/audit_q34.py --mode all_directional --arms all --seeds 61-160
+
+# 逐层消融 q4-v18（关覆盖清除 / 关排除圆 / 关知识矩阵，对照 v17、v14）
+python3 script/audit_q34.py --mode all_directional --arms ablation --seeds 61-160
+
+# 问题3
+python3 script/audit_q34.py --mode omni --strategy q3-v18 --seeds 61-160
+
+# 复现 2026-09-13 之前归档的基准（失败 /clear 也按 5s）
+python3 script/audit_q34.py --mode mixed --strategy q4-v17 --seeds 1-60 --legacy-timing
+```
+
+三种模式：`mixed`（默认分布）、`all_directional`（**压力场景**，全部源设为定向；
+`generate_case` 默认只生成 1..⌊n/2⌋ 个定向源，覆盖不到高定向占比）、`omni`（问题3）。
+逐案例统计落到 `logs/audit/<mode>_<arm>_<start>_<end>.json`，失败案例的完整轨迹
+（含**仅供离线诊断**的源真值）单独落盘 `logs/audit/failure_*.json`，便于复现
+"估计误差 33m、最近试清距离 21.5m"这类根因。
+
+### 8.2 `script/q3_or_opt_ablation.py` —— 问题3 的三轴分解
+
+```bash
+python3 script/q3_or_opt_ablation.py                    # 1-30 / 1-60 / 61-160
+python3 script/q3_or_opt_ablation.py --seeds 1-30 --json logs/q3_ablation.json
+```
+
+把问题3 的收益拆成**三个互不相干的轴**，避免把两笔账算到一个机制头上：
+
+| 轴 | 效果 |
+| --- | --- |
+| 扫描布局定稿 `6/1130/3` vs 注册表旧默认 `7/1110/2` | 约 −4.5 ~ −8.6 s/源（**最大的一项**） |
+| 在线 or-opt 比较基准 bug 修正 | 约 −1.9 ~ −7.1 s/源（修正前它在空转） |
+| 覆盖式清除（v18 新增） | **中性**（±0.5 s/源，噪声内） |
+
+判别"定稿布局是 6/1130/3"的依据也在这里：归档口径（`--legacy-timing`）+ or-opt 关闭时，
+定稿布局在 seed 1–30 上给出 **264.81**，与最终工程 `README` 的 v15 数字**逐位一致**；
+而 `7/1110/2` 给出 273.73。`versioned.Q3_SCAN_PARAMS` 就是这组参数。

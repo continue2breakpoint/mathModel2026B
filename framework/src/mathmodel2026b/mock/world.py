@@ -167,6 +167,11 @@ class World:
     robot_id: str
     arena_id: str = "default"
     clear_requires_switch: bool = False
+    #: ``True`` 时把**失败的** ``/clear`` 也按 5s 计（旧 mock 口径，仅用于复现
+    #: 2026-09-13 之前归档的基准数字）。默认 ``False`` = 附件1 §2.3 的正确口径：
+    #: 未发现 3s、已清除 5s。两者对同一动作轨迹满足
+    #: ``T_legacy = T_correct + 2 * N_clear_failure``。
+    legacy_clear_timing: bool = False
     max_virtual_duration_s: float = MAX_VIRTUAL_DURATION_S
     max_real_duration_s: float = MAX_REAL_DURATION_S
 
@@ -249,15 +254,21 @@ class World:
         self._advance_to(position)
         if self.clear_requires_switch:
             self._select_channel(channel)
-        self.virtual_time_s += OPTICAL_SECONDS + CLEAR_SECONDS
 
         jammer = self.case.by_channel().get(channel)
-        outcome: ClearOutcome
-        if (
+        hit = (
             jammer is not None
             and channel not in self.cleared
             and position.distance_to(jammer.position) <= OPTICAL_RANGE_M
-        ):
+        )
+        # 附件1 §2.3：先光学精确定位 3s；命中才再花 2s 激光清除。
+        # 未发现 = 3s，成功 = 5s；且 /clear 不切换测向机频道（不产生 1s 切换）。
+        self.virtual_time_s += OPTICAL_SECONDS
+        if hit or self.legacy_clear_timing:
+            self.virtual_time_s += CLEAR_SECONDS
+
+        outcome: ClearOutcome
+        if hit:
             self.cleared.add(channel)
             outcome = ClearOutcome("success", channel)
         else:

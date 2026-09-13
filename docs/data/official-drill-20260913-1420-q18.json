@@ -1,0 +1,45 @@
+{
+  "note": "2026-09-13 14:19–14:23 官方模拟器演练（jammers-simulator-full，Windows VM 192.168.122.161，portrelay → 127.0.0.1:2026）的两局记录。真值来自官方落盘的 *.result.json（behavior-logs），非 mock。策略：q3-v18 / q4-v18（注册表 DECISION_METHODS 里 final=True 的两条），经 script/official_drill_q34.py 驱动。演练不限次数、不消耗正式机会。",
+  "transport": {
+    "host": "192.168.122.161",
+    "port": 2026,
+    "relay": "portrelay.exe (SYSTEM 计划任务 PortRelay, 绑 192.168.122.161 → 127.0.0.1:2026)",
+    "robot_url": "http://192.168.122.161:2026"
+  },
+  "runs": [
+    {
+      "problem_no": 3,
+      "case_code": "VSSN-5G4G-AWMY-2ENJ",
+      "jammer_count": 14,
+      "omnidirectional_jammer_count": 14,
+      "directional_jammer_count": 0,
+      "arm": "q3-v18",
+      "virtual_time_s": 3357.525,
+      "cleared": 14,
+      "avg_s_per_source": 239.82,
+      "measures": 110,
+      "clear_calls": 19,
+      "clear_hits": 14,
+      "wall_s": 0.5,
+      "window_started_at_utc": "2026-09-13T06:19:19.878Z",
+      "ended_at_utc": "2026-09-13T06:20:24.439Z"
+    },
+    {
+      "problem_no": 4,
+      "case_code": "2FAE-SPSW-TG7E-UQH3",
+      "jammer_count": 15,
+      "omnidirectional_jammer_count": 4,
+      "directional_jammer_count": 11,
+      "arm": "q4-v18",
+      "virtual_time_s": 6339.556,
+      "cleared": 15,
+      "avg_s_per_source": 422.64,
+      "measures": 240,
+      "clear_calls": 16,
+      "clear_hits": 15,
+      "wall_s": 0.6,
+      "window_started_at_utc": "2026-09-13T06:22:58.072Z",
+      "ended_at_utc": "2026-09-13T06:23:03.034Z"
+    }
+  ]
+}

@@ -8,6 +8,10 @@
 # 本地环境覆盖（可能含机器相关路径，不提交）
 /script/jammers.local.json
 
+# 脚本写到仓库根的默认产物（内容随每次运行变化；留档副本见 docs/data/ 与 logs/）
+/最终验收_问题34_结果.txt
+/官方演练_问题34_结果.txt
+
 # Python 缓存
 __pycache__/
 *.py[cod]
@@ -34,3 +38,6 @@ venv/
 *.a
 *.dylib
 build/
+
+# WinRM 远程运维用的 PowerShell 模块（28MB 二进制，从 PSGallery 下载，可重新获取）
+/tools/pwsh-wsman/

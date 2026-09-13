@@ -57,4 +57,7 @@ class Q3V8Strategy(Q3V7Strategy):
                 self.direct_miss = getattr(self, "direct_miss", 0) + 1
                 # 就地补一条读数，让可行域收缩后再交给常规精定位流程
                 self._measure(client, state, est, channel, reason="direct-fail")
+        # 扩展点（默认空操作）：v18 在这里插入可证明的覆盖式清除
+        if self._after_direct_clear_failed(client, state, channel):
+            return
         super(Q3V8Strategy, self)._localize_and_clear(client, state, channel)

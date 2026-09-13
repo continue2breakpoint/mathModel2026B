@@ -12,7 +12,11 @@
    slotted 子类的 ``__slots__`` 只含自己声明的字段，继承字段（如
    ``Q3V15Params.schedule_min_readings``）会被误判为"未知参数"。
 3. **移植保真**：v8 在 30 seed 上的 ``avg_med`` 必须与归档数字一致（267.19），
-   否则说明移植过程改动了行为。
+   否则说明移植过程改动了行为。该归档用的是旧 mock 计时，复现时要显式打开
+   ``legacy_clear_timing``。
+4. **"全清"是有条件的**：q4-v17 在种子 1–60 上 760/760，在持有集 61–160 上
+   只有 97/100。注册表因此把交付入口从 ``q4-v14`` 移到 ``q4-v18``，
+   并把 ``q4-v14``/``q4-v17`` 降成冻结对照臂。
 """
 
 from __future__ import annotations
@@ -41,9 +45,9 @@ ROBOT = "000000000000"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _run(strategy, *, seed: int, directional: bool) -> dict:
+def _run(strategy, *, seed: int, directional: bool, legacy_timing: bool = False) -> dict:
     case = generate_case(seed, omni_only=not directional)
-    with MockSimulator(robot_id=ROBOT, case=case) as sim:
+    with MockSimulator(robot_id=ROBOT, case=case, legacy_clear_timing=legacy_timing) as sim:
         client = HttpSimulatorClient(robot_id=ROBOT, base_url=sim.base_url, verbose=False)
         state = DogState()
         client.enter()
@@ -66,18 +70,43 @@ def test_registry_covers_all_documented_methods() -> None:
         "q3-v7",
         "q3-v8",
         "q3-v15",
+        "q3-v18",
         "q4-v8",
         "q4-v9",
         "q4-v14",
+        "q4-v17",
+        "q4-v18",
+        "q3-v10",
+        "q3-v11",
+        "q3-v12",
+        "q3-v13",
+        "q3-v16",
         "paper-q4",
     ]
 
 
 def test_exactly_two_final_methods_one_per_problem() -> None:
     finals = {k: v for k, v in DECISION_METHODS.items() if v.final}
-    assert set(finals) == {"q3-v15", "q4-v14"}
-    assert finals["q3-v15"].problem == (3,)
-    assert finals["q4-v14"].problem == (4,)
+    assert set(finals) == {"q3-v18", "q4-v18"}
+    assert finals["q3-v18"].problem == (3,)
+    assert finals["q4-v18"].problem == (4,)
+
+
+def test_negative_results_are_ported_but_not_selectable() -> None:
+    """负结果代必须**已在仓库里可跑**，同时**不得**被标成可选。
+
+    移植它们不是为了用，而是为了：(a) 论文里的"试过并否决"有代码可复现，
+    (b) 消融时能真的把它们打开跑一遍，而不是只凭文档里的结论。
+    """
+    from mathmodel2026b.versioned import NEGATIVE_ENTRIES
+
+    archived = {k for keys in NEGATIVE_ENTRIES.values() for k in keys}
+    assert archived == {"q3-v10", "q3-v11", "q3-v12", "q3-v13", "q3-v16"}
+    for key in archived:
+        spec = DECISION_METHODS[key]
+        assert spec.negative_result, f"{key} 应标记为负结果"
+        assert not spec.final and not spec.route_entry
+        assert build_method(key) is not None  # 必须真的能构造出来
 
 
 def test_problem_partition() -> None:
@@ -90,21 +119,36 @@ def test_problem_partition() -> None:
         "q3-v7",
         "q3-v8",
         "q3-v15",
+        "q3-v18",
+        "q3-v10",
+        "q3-v11",
+        "q3-v12",
+        "q3-v13",
+        "q3-v16",
     ]
     # paper-q4 只解问题4；q4-v8 是"把全向 v8 直接套到定向场景"的反例臂
-    assert available_methods(4) == ["matrix", "q4-v8", "q4-v9", "q4-v14", "paper-q4"]
+    assert available_methods(4) == [
+        "matrix",
+        "q4-v8",
+        "q4-v9",
+        "q4-v14",
+        "q4-v17",
+        "q4-v18",
+        "paper-q4",
+    ]
 
 
 def test_each_problem_has_exactly_two_usable_routes() -> None:
     """路线总览的硬约束：每个问题只有两条可用路线。
 
-    问题3：matrix ／ q3-v8、q3-v15（迭代优化版）
-    问题4：paper-q4 ／ q4-v14
-    排除项：原始 q3（过时）；问题4 上的 matrix、q4-v8、q4-v9（全清率不达标）
+    问题3：matrix ／ q3-v8、q3-v18（迭代优化版）
+    问题4：paper-q4 ／ q4-v18
+    排除项：原始 q3（过时）；问题4 上的 matrix、q4-v8、q4-v9（全清率不达标）、
+           ``q4-v14``/``q4-v17``（在持有集 61–160 上分别只有 94/100、97/100）
     """
     # 权威声明来自注册表，而不是本测试自己再算一遍
-    assert usable_routes(3) == ["matrix", "q3-v8", "q3-v15"]
-    assert usable_routes(4) == ["q4-v14", "paper-q4"]
+    assert usable_routes(3) == ["matrix", "q3-v8", "q3-v18"]
+    assert usable_routes(4) == ["q4-v18", "paper-q4"]
     # route_entry 标记必须与 ROUTE_ENTRIES 完全一致（模块导入时已自检，
     # 这里再钉一次，防止有人把自检删掉）
     declared = {
@@ -198,15 +242,24 @@ def _load_run_module():
     return module
 
 
-def test_param_override_accepts_inherited_slotted_field() -> None:
-    """``schedule_min_readings`` 声明在 Q3V8Params，但必须能覆盖 Q3V15Params。"""
+@pytest.mark.parametrize(
+    "key,expected_or_opt",
+    # OR_OPT_PASSES 在 2026-09-13 由 0 改为 4：原先设 0 是因为 or-opt 的比较基准
+    # 有 bug（空转），修正后它变成真实收益项。见 docs/review-fixes-2026-09-13.md §5。
+    [("q3-v15", 4), ("q3-v18", 4)],
+)
+def test_param_override_accepts_inherited_slotted_field(key: str, expected_or_opt: int) -> None:
+    """``schedule_min_readings`` 声明在 Q3V8Params，但必须能覆盖继承它的子类参数。"""
+    from mathmodel2026b.versioned import OR_OPT_PASSES
+
+    assert OR_OPT_PASSES == expected_or_opt
     run_module = _load_run_module()
     params = run_module.build_strategy_params(
-        "q3-v15", False, ["schedule_min_readings=3"]
+        key, False, ["schedule_min_readings=3"]
     )
     assert params.schedule_min_readings == 3
     # 交付参数必须仍然在（只被显式覆盖的那一项改动）
-    assert params.or_opt_passes == 0
+    assert params.or_opt_passes == expected_or_opt
 
 
 def test_param_override_rejects_unknown_field() -> None:
@@ -239,14 +292,14 @@ def test_run_py_factory_returns_the_real_strategy_class() -> None:
 # --------------------------------------------------------------------------
 # 4. 端到端全清（问题3 / 问题4 各取少量 seed，保证 CI 快）
 # --------------------------------------------------------------------------
-@pytest.mark.parametrize("key", ["q3-v8", "q3-v15"])
+@pytest.mark.parametrize("key", ["q3-v8", "q3-v15", "q3-v18"])
 @pytest.mark.parametrize("seed", [1, 2])
 def test_q3_methods_clear_fully(key: str, seed: int) -> None:
     summary = _run(build_method(key), seed=seed, directional=False)
     assert summary["cleared_count"] == summary["n_jammers"], f"{key} seed={seed}"
 
 
-@pytest.mark.parametrize("key", ["q4-v9", "q4-v14"])
+@pytest.mark.parametrize("key", ["q4-v9", "q4-v14", "q4-v17", "q4-v18"])
 @pytest.mark.parametrize("seed", [1, 2])
 def test_q4_methods_clear_fully(key: str, seed: int) -> None:
     summary = _run(build_method(key), seed=seed, directional=True)
@@ -258,17 +311,61 @@ def test_q4_methods_clear_fully(key: str, seed: int) -> None:
 # --------------------------------------------------------------------------
 @pytest.mark.slow
 def test_v8_reproduces_archived_30_seed_median() -> None:
-    """``_bench_versions.py --mode omni --seeds 1-30`` 的 v8 行。
+    """移植保真：v8 的 30 seed 数字必须与归档一致。
 
     归档（``Q3Q4优化_v2_.../outputs/_b30_v8.txt``，schedule_min_readings=1）：
     ``avg_med=267.19``、``dist_med=13136``、``full=30/30``。
+
+    ⚠️ 这组归档数字是在 **旧 mock 计时**（失败的 ``/clear`` 也算 5s）下产生的。
+    附件1 §2.3 规定未发现 3s、已清除 5s，mock 已按题目修正，因此复现归档必须
+    显式打开 ``legacy_clear_timing``。修正后的同一组案例是 265.92（见
+    ``docs/review-fixes-2026-09-13.md``）—— 差别正是 −2s × 该局失败的清除次数。
     """
     avgs: list[float] = []
     dists: list[float] = []
     for seed in range(1, 31):
-        summary = _run(build_method("q3-v8"), seed=seed, directional=False)
-        assert summary["cleared_count"] == summary["n_jammers"], f"seed={seed}"
+        summary = _run(build_method("q3-v8"), seed=seed, directional=False, legacy_timing=True)
+        assert summary["cleared_count"] == summary["n_jammers"], f"{seed}"
         avgs.append(summary["average_clear_time_s"])
         dists.append(summary["move_distance_m"])
     assert statistics.median(avgs) == pytest.approx(267.19, abs=0.05)
     assert statistics.median(dists) == pytest.approx(13136, abs=1.0)
+
+
+@pytest.mark.slow
+def test_q3_delivery_scan_config_reproduces_the_final_project_264_81() -> None:
+    """问题3 的"定稿扫描布局"必须逐位复现最终工程 README 里的 264.81。
+
+    2026-09-13 的整合中发现：注册表原先只覆盖 ``schedule_min_readings`` /
+    ``or_opt_passes``，扫描布局一直沿用 ``Q3V5Params`` 的**字段默认**
+    ``sides=7 / radius=1110 / probe_limit=2``（旧口径下 273.73）；而最终工程
+    ``FINAL_PARAMS`` 是 ``sides=6 / radius=1130 / probe_limit=3``（旧口径下 264.81）。
+    两者**不是同一个配置**，差 8.9 s/源。这组参数现已并入
+    ``versioned.Q3_SCAN_PARAMS``，本测试就是它的锚点。
+    """
+    from mathmodel2026b.versioned import Q3_SCAN_PARAMS
+    from mathmodel2026b.strategy_v15 import Q3V15Params, Q3V15Strategy
+
+    assert Q3_SCAN_PARAMS == {"scan_sides": 6, "scan_radius": 1130.0, "scan_probe_limit": 3}
+
+    avgs: list[float] = []
+    for seed in range(1, 31):
+        strategy = Q3V15Strategy(
+            Q3V15Params(schedule_min_readings=1, or_opt_passes=0, **Q3_SCAN_PARAMS)
+        )
+        summary = _run(strategy, seed=seed, directional=False, legacy_timing=True)
+        assert summary["cleared_count"] == summary["n_jammers"], f"seed={seed}"
+        avgs.append(summary["average_clear_time_s"])
+    assert statistics.median(avgs) == pytest.approx(264.81, abs=0.05)
+
+
+@pytest.mark.slow
+def test_q3_registry_delivery_overrides_carry_the_scan_config() -> None:
+    """交付覆盖必须**真的**把定稿扫描布局带上，而不是只写在文档里。"""
+    from mathmodel2026b.versioned import Q3_SCAN_PARAMS
+
+    for key in ("q3-v15", "q3-v18"):
+        params = build_method(key).params
+        for field, value in Q3_SCAN_PARAMS.items():
+            assert getattr(params, field) == value, f"{key}.{field} 没套上交付覆盖"
+        assert params.or_opt_passes == 4

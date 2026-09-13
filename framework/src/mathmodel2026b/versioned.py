@@ -19,18 +19,38 @@
     ``q3-v6``   **扫描点与待清源合并成单一任务集**（最大单项杠杆）
     ``q3-v7``   任务集路由换 NN + 2-opt（带前瞻）
     ``q3-v8``   **直接清优先**：到估计点先 ``/clear``，失败才精定位
-    ``q3-v15``  **最终交付**：v8 + no_signal 排除修正估计点（30/30 全清）
+    ``q3-v15``  v8 + no_signal 排除修正估计点（上一代交付，现为对照臂）
+    ``q3-v18``  **最终交付**：v15 + 修正后的 or-opt + 知识矩阵负例
+                + 可证明的覆盖式清除 + 代价模型
 
 问题4（全向 + 定向混合）
     ``q4-v8``   v8 直接当定向策略用 —— **反例**，发现层不朝向完备会漏源
     ``q4-v9``   **阶段性有益尝试**：朝向完备的两圈式发现层（25 点/18828m）
                 + 正面锥限定的精定位候选 + 可行域内部取点 + 镜像探点
-    ``q4-v14``  **最终交付**：v9 + 沿射线推进（walk-the-ray）二分精定位
+    ``q4-v14``  **上一代交付**：v9 + 沿射线推进（walk-the-ray）二分精定位
                 + 地毯式清除 + 免重测/免重清（30/30 全清）
+    ``q4-v17``  **冻结对照臂**：方法二 24 点联合优化布局 + 15m 环形兜底
+                （60 种子 760/760，但在持有集 61–160 上只有 97/100）
+    ``q4-v18``  **最终交付**：v17 在线机制 + 知识矩阵负例（失败清除 20m 排除圆）
+                + 可证明的覆盖式清除（25m 格铺满保守可行域）
 
-未纳入（负结果，见 ``docs/q34-version-lineage.md``）：v10 侧向补测、v11 延迟调度、
-v12 单读数猜距、v13 顺路探针、v16 侧向补测先行、``follow_plan``、
-``schedule_min_readings=2``、``ray_entry_scheduling``、``ray_first``。
+未纳入（负结果，模块仍在仓库里但**不作为选项**，见 ``docs/q34-version-lineage.md``）：
+v10 侧向补测、v11 延迟调度、v12 单读数猜距、v13 顺路探针、v16 侧向补测先行、
+``follow_plan``、``ray_entry_scheduling``、``ray_first``。
+
+计时口径（引用 effect 里的数字前必读）
+--------------------------------------
+``effect`` 字段里的 mock 数字分属**两个口径**，不能混读：
+
+* **修正口径**（2026-09-13 起，附件1 §2.3）：失败的 ``/clear`` 花 3s、成功花 5s，
+  且 ``/clear`` 不切换测向机频道。``q3-v18`` / ``q4-v18`` 与所有持有集审计数字
+  都是这个口径。
+* **归档口径**（2026-09-13 之前）：mock 对所有 ``/clear`` 一律加 3+2=5s。
+  ``q3-v15`` 的 264.81/273.73、``q4-v14`` 的 500.57/513.66、``matrix`` 的 330.24
+  等都属于这一档。两者对同一动作轨迹满足
+  ``T_legacy = T_correct + 2 × N_clear_failure``。
+  要逐位复现旧数字，用 ``World(legacy_clear_timing=True)`` /
+  ``MockSimulator(legacy_clear_timing=True)`` / 各脚本的 ``--legacy-timing``。
 
 参数默认值口径
 --------------
@@ -73,6 +93,8 @@ __all__ = [
     "q4_v8",
     "q4_v9",
     "q4_v14",
+    "q4_v17",
+    "q4_v18",
 ]
 
 # --------------------------------------------------------------------------
@@ -84,11 +106,45 @@ __all__ = [
 #: 这一条是本轮最大的单项杠杆（≈ −11%）。
 SCHEDULE_MIN_READINGS = 1
 
-#: v15：在线路由 or-opt 额外轮数。
-#: 类默认 4；但 v2 归档的 30 seed 记录里"or-opt 在线版 ≈ 0"，
-#: 且 v15 相对 v8 的净收益（−0.9 s/源）已由 no_signal 排除区单独解释，
-#: 因此交付配置关闭 or-opt，避免把中性项当作收益项写进论文。
-OR_OPT_PASSES = 0
+#: 在线路由 or-opt 额外轮数。
+#:
+#: ⚠️ 口径变更（2026-09-13）。原先设为 0，理由是"归档的 30 seed 记录里
+#: or-opt 在线版 ≈ 0，属中性项"。那个结论是**代码 bug 的假象**：
+#: ``strategy_v15._two_opt`` 把候选路线与"删掉片段后的短路线"比较
+#: （``base = self._path_len(start, rest)``），而由三角不等式
+#: ``len(cand) >= len(rest)`` 恒成立，该判据几乎不可能接受任何动作 ——
+#: or-opt 一直在空转。修正为与"本轮搬移前的完整 route"比较之后，
+#: 它变成一个**真实收益项**：
+#:
+#: * 种子 1–60：（v15 无 or-opt）281.94 → 278.41 avg 中位
+#: * 种子 61–160：（v15 无 or-opt）279.29 → 275.77；配对总时间 −30.89 s/局
+#:
+#: 因此交付配置改为开启，并且 ``q3-v18`` 在这两个种子集上叠加覆盖式清除后
+#: 进一步降到 275.54 / 272.08。详见 ``docs/review-fixes-2026-09-13.md``。
+OR_OPT_PASSES = 4
+
+#: 问题3 的扫描布局**定稿参数**（2026-09-13 由最终工程副本迁入）。
+#:
+#: 上一版注册表只覆盖了 ``schedule_min_readings`` / ``or_opt_passes``，扫描布局沿用
+#: :class:`~mathmodel2026b.strategy_v5.Q3V5Params` 的默认值（``sides=7, radius=1110,
+#: probe_limit=2``）；而最终工程副本的 ``FINAL_PARAMS`` 是
+#: ``sides=6, radius=1130, probe_limit=3``。**两者不是同一配置**，差距很大：
+#:
+#: ==========================  =========  =========  ===========
+#: 配置                         seed 1–30  seed 1–60  seed 61–160
+#: ==========================  =========  =========  ===========
+#: 注册表旧默认（7/1110/2）      272.41     281.94     279.29
+#: 定稿（6/1130/3）              263.81     277.46     278.74
+#: ==========================  =========  =========  ===========
+#:
+#: （``avg`` 中位 s/源，``or_opt_passes=0``，修正计时口径。）
+#: 归档口径下"定稿 + or_opt=0"在 seed 1–30 上给出 **264.81** —— 与最终工程
+#: ``README`` 里的 v15 数字**逐位一致**，这就是"交付配置是哪一套"的判定依据。
+Q3_SCAN_PARAMS: dict[str, Any] = {
+    "scan_sides": 6,
+    "scan_radius": 1130.0,
+    "scan_probe_limit": 3,
+}
 
 Q3_DELIVERY_PARAMS: dict[str, Any] = {"schedule_min_readings": SCHEDULE_MIN_READINGS}
 Q4_DELIVERY_PARAMS: dict[str, Any] = {}
@@ -131,6 +187,9 @@ class MethodSpec:
     fails_q4_requirement: bool = False
     #: 是否为"另一条独立路线"（不是历代版本，而是并列的另一种解法）
     separate_route: bool = False
+    #: **负结果归档**：模块已移植（可跑、可复现、可消融），但实测净亏，
+    #: 明确不应作为交付选项。列出来是为了让"不要选它"有据可查。
+    negative_result: bool = False
     #: 备注 / 使用约束
     note: str = ""
 
@@ -247,7 +306,12 @@ DECISION_METHODS: dict[str, MethodSpec] = {
         overrides={"schedule_min_readings": SCHEDULE_MIN_READINGS},
         final=False,
         adds="**直接清优先**：走到估计点先 /clear（失败仅 5s，与一次检测同价），失败再精定位",
-        effect="本仓库 mock 30 seed：267.19 s/源、30/30 全清（与归档逐位一致，见 framework/tests/test_versioned_strategies.py::test_v8_reproduces_archived_30_seed_median）",
+        effect=(
+            "本仓库 mock 30 seed：267.19 s/源、30/30 全清（**归档口径**，与归档逐位一致，"
+            "见 framework/tests/test_versioned_strategies.py::"
+            "test_v8_reproduces_archived_30_seed_median）；"
+            "修正口径同集合 **265.92**"
+        ),
         beneficial_intermediate=True,
         route_entry=True,
         note=(
@@ -263,14 +327,125 @@ DECISION_METHODS: dict[str, MethodSpec] = {
         overrides={
             "schedule_min_readings": SCHEDULE_MIN_READINGS,
             "or_opt_passes": OR_OPT_PASSES,
+            **Q3_SCAN_PARAMS,
+        },
+        final=False,
+        beneficial_intermediate=True,
+        adds="**no_signal 排除区修正估计点**（全向源在 B 处 no_signal ⟹ 真值在 disk(B,1000) 外）",
+        effect=(
+            "delivery 配置 = 定稿扫描布局（6/1130/3）+ or-opt。修正计时口径下 avg 中位："
+            "1–30 **256.68**、1–60 275.51、61–160 271.65，三组均 100/100 全清；"
+            "归档口径（or-opt 关闭）seed 1–30 = **264.81**，与最终工程 README 逐位一致"
+        ),
+        note=(
+            "问题3 的**上一代交付**，现在保留为路线B 的对照臂（被 ``q3-v18`` 取代）。"
+            "机制：可行域（用于 MEC≤20 判据）**不变**，只是让调度锚点与直接清的命中点"
+            "更准（``no_signal`` ⟹ 真值在 disk(B,1000) 之外）。"
+            "⚠️ 它相对 ``q3-v8`` 的净收益必须分开读：修正 or-opt 的比较基准后，"
+            "``q3-v15`` 本身只贡献很小一部分，主要收益来自 or-opt（原先因 bug 空转）。"
+        ),
+    ),
+    "q3-v18": MethodSpec(
+        key="q3-v18",
+        problem=(3,),
+        params_ref="mathmodel2026b.strategy_v18:Q3V18Params",
+        strategy_ref="mathmodel2026b.strategy_v18:Q3V18Strategy",
+        overrides={
+            "schedule_min_readings": SCHEDULE_MIN_READINGS,
+            "or_opt_passes": OR_OPT_PASSES,
+            **Q3_SCAN_PARAMS,
         },
         final=True,
         route_entry=True,
-        adds="**no_signal 排除区修正估计点**（全向源在 B 处 no_signal ⟹ 真值在 disk(B,1000) 外）",
-        effect="本仓库 mock 30 seed：273.73 s/源、30/30；归档交付口径 264.81（v8 267.19）。本仓库 mock 上该机制为 −6.5 s/源的回归，见 docs/q34-version-lineage.md §2.3",
+        adds=(
+            "**问题3 最终交付**：v15（换成定稿扫描布局 6/1130/3）+ ① 修正后的在线 or-opt"
+            "（比较基准 bug 已修，从空转变为真实收益）+ ② 知识矩阵负例（失败 /clear 的"
+            "20m 排除圆）+ ③ 可证明的覆盖式清除（25m 格铺满保守可行域，格心到格内任意点 "
+            "25/√2=17.678m<20m）+ ④ 代价模型（k≤2 时 3k+2 秒 < 再测一次+清一次 的 11 秒）"
+        ),
+        effect=(
+            "修正计时口径下 avg 中位（s/源）：1–30 **256.11**、1–60 275.54、61–160 **272.08**，"
+            "三组均 100/100 全清。收益分解（同集合 v15 定稿布局）：or-opt 修正贡献 "
+            "−7.1 / −1.9 / −7.1 s/源；扫描布局定稿相对注册表旧默认贡献约 −8.6 / −4.5 / −0.6；"
+            "**覆盖式清除在问题3 上是中性**（±0.5 s/源，在噪声内）"
+        ),
         note=(
-            "本仓库问题3 最终交付版。可行域（用于 MEC≤20 判据）**不变**，只是让调度锚点"
-            "与直接清的命中点更准。or-opt 默认关闭（中性项）。"
+            "问题3 交付版。为什么它而不是 ``q3-v15``：两者在问题3 上基本打平"
+            "（覆盖式清除这一层在问题3 上测得为**中性**），选它是为了与 ``q4-v18`` 共用"
+            "同一套机制与同一条『清除保证』论证 —— 论文里只需要讲一个故事。"
+            "三层机制都可单独消融（``use_region_clear`` / ``or_opt_passes`` / "
+            "``use_failed_clear_exclusions``）。"
+            "⚠️ 覆盖保证是**条件性**的：前提是『真值 ∈ 保守可行域』且预算未耗尽；"
+            "完整执行却没命中时策略记 ``region_violated``。见 ``q4-v18`` 与 "
+            "``framework/tests/test_v18_region_clear.py``。"
+        ),
+    ),
+    # ---- 问题3 的负结果归档（可跑，但实测净亏；细节见 docs/q34-version-lineage.md）----
+    "q3-v10": MethodSpec(
+        key="q3-v10",
+        problem=(3,),
+        params_ref="mathmodel2026b.strategy_v10:Q3V10Params",
+        strategy_ref="mathmodel2026b.strategy_v10:Q3V10Strategy",
+        overrides={"schedule_min_readings": SCHEDULE_MIN_READINGS},
+        final=False,
+        negative_result=True,
+        adds="侧向补测：在估计点侧面加一次检测（想用横向基线切开细长可行域）",
+        effect="净亏。多走的一趟比省下的读数贵得多 —— 本问题 1s = 5m，检测便宜、走路贵",
+        note=(
+            "⚠️ 已否决，**不要作为交付选项**。它企图解决的『细长可行域』问题，"
+            "在 v15 里由 ``no_signal`` 排除圆盘更低成本地解决；在 v18 里进一步由"
+            "『覆盖式清除』直接绕过（细长域用 1~3 个 20m 圆就能盖住）。"
+        ),
+    ),
+    "q3-v11": MethodSpec(
+        key="q3-v11",
+        problem=(3,),
+        params_ref="mathmodel2026b.strategy_v11:Q3V11Params",
+        strategy_ref="mathmodel2026b.strategy_v11:Q3V11Strategy",
+        overrides={"schedule_min_readings": SCHEDULE_MIN_READINGS},
+        final=False,
+        negative_result=True,
+        adds="延迟调度：把待清频道压后到扫描末段统一处理",
+        effect="净亏。破坏了『顺路清』的交织，清源段被拉长",
+        note="⚠️ 已否决。``schedule_min_readings=2`` 的同一类错误（实测 314.77 vs 267.19）。",
+    ),
+    "q3-v12": MethodSpec(
+        key="q3-v12",
+        problem=(3,),
+        params_ref="mathmodel2026b.strategy_v12:Q3V12Params",
+        strategy_ref="mathmodel2026b.strategy_v12:Q3V12Strategy",
+        overrides={"schedule_min_readings": SCHEDULE_MIN_READINGS},
+        final=False,
+        negative_result=True,
+        adds="单读数猜距：只有一条读数时按统计中位距离猜一个具体点",
+        effect="净亏且不稳定：猜错就多走一趟，猜对也只省一次检测",
+        note="⚠️ 已否决。估计点的**保守性**是清除判据的根基，猜距等于把保证换成赌博。",
+    ),
+    "q3-v13": MethodSpec(
+        key="q3-v13",
+        problem=(3,),
+        params_ref="mathmodel2026b.strategy_v13:Q3V13Params",
+        strategy_ref="mathmodel2026b.strategy_v13:Q3V13Strategy",
+        overrides={"schedule_min_readings": SCHEDULE_MIN_READINGS},
+        final=False,
+        negative_result=True,
+        adds="顺路探针：沿当前路线顺带对邻近频道补读数",
+        effect="净亏。路线扰动带来的额外里程超过了省下的探针",
+        note="⚠️ 已否决。v18 用『失败清除圆』把负例信息利用得更彻底且不扰动路线。",
+    ),
+    "q3-v16": MethodSpec(
+        key="q3-v16",
+        problem=(3,),
+        params_ref="mathmodel2026b.strategy_v16:Q3V16Params",
+        strategy_ref="mathmodel2026b.strategy_v16:Q3V16Strategy",
+        overrides={"schedule_min_readings": SCHEDULE_MIN_READINGS},
+        final=False,
+        negative_result=True,
+        adds="侧向补测先行：在 v15 之前先做一轮横向补测把交会角打开",
+        effect="净亏。与 v10 同源，只是把时机提前",
+        note=(
+            "⚠️ 已否决：侧向补测有 2/30 局破坏全清。"
+            "v18 的覆盖式清除是不需要任何补测就能兜住这类几何的直接替代。"
         ),
     ),
     # ---------------- 问题4 ----------------
@@ -340,18 +515,76 @@ DECISION_METHODS: dict[str, MethodSpec] = {
         params_ref="mathmodel2026b.strategy_v14:Q4V14Params",
         strategy_ref="mathmodel2026b.strategy_v14:Q4V14Strategy",
         overrides={},
-        final=True,
-        route_entry=True,
+        final=False,
+        beneficial_intermediate=True,
         adds=(
             "**沿射线推进**（walk-the-ray）二分精定位 + 区间平移继承 + 地毯式清除"
             " + 同点免重测 + 失败点免重清"
         ),
-        effect="本仓库 mock 30 seed：513.66 s/源、30/30 全清，是论文冻结内核 (1308.84 s/源、同为 30/30) 的 1/2.55；归档交付口径 500.57 s/源、30/30",
+        effect="本仓库 mock 30 seed：513.66 s/源、30/30 全清，是论文冻结内核 (1308.84 s/源、同为 30/30) 的 1/2.55；归档交付口径 500.57 s/源、30/30。持有集 61–160 混合 97/100",
         note=(
-            "本仓库问题4 最终交付版。核心正确性论证：射线上的点 q(t)=A+t·u 在 t<t_G 时"
-            "必出读数、t>t_G 时定向源必 no_signal，故『步进 + no_signal 二分』在 O(log) 步内"
-            "把源距压到小区间；区间 <40m 时改用与朝向无关的 clear 判据地毯式清除。"
+            "问题4 的**上一代交付**，现保留为对照臂（被 ``q4-v18`` 取代）。"
+            "核心机制：射线上的点 q(t)=A+t·u 在 t<t_G 时必出读数、t>t_G 时定向源必 no_signal，"
+            "故『步进 + no_signal 二分』在 O(log) 步内把源距压到小区间。"
+            "⚠️ **但这个论证不成立**：测向有 ±1° 误差，靠近波束边缘时机器狗可能在尚未接近"
+            "源之前就走到背面（复核给出显式反例，见 docs/review-fixes-2026-09-13.md §2），"
+            "因此射线推进只能当作启发式，不能作为『必清』的证明，也不能污染保守可行域。"
             "默认关闭 ray_entry_scheduling 与 ray_first（两者实测回归且破坏 seed 7）。"
+        ),
+    ),
+    "q4-v17": MethodSpec(
+        key="q4-v17",
+        problem=(4,),
+        params_ref="mathmodel2026b.strategy_v17:Q4V17Params",
+        strategy_ref="mathmodel2026b.strategy_v17:Q4V17Strategy",
+        overrides={},
+        final=False,
+        beneficial_intermediate=True,
+        adds=(
+            "发现层换成**方法二联合优化布局**（24 点，离线 SCP 坐标步 + 顺序搜索 +"
+            "删点-修复产出，路线 18507.5m）+ 直接清失败后的 15m 六点环形试探"
+        ),
+        effect=(
+            "在调参用过的 60 种子（1–60）上：760/760 全清、vt 中位 6242.8s、"
+            "平均源耗时中位 6242.8/16 ≈ 390s；**但持有集 61–160 上只有 97/100**"
+            "（混合与全定向压力场景各 97/100），漏掉的源全部已有测向读数"
+        ),
+        note=(
+            "**冻结对照臂**：它是 v18 的直接父类，也是『在调参种子上全清 ≠ 全清』"
+            "这条教训的活证据。布局证书（24 点，连续单元充分条件通过）本身没问题，"
+            "问题出在精定位与清除兜底 —— 15m 环对任意误差方向只保证覆盖约 31.53m，"
+            "盖不住 35–40m 的估计误差；单纯加大环半径还会在环间留空隙。"
+            "保留它用于 A/B 与消融，见 framework/tests/test_v18_region_clear.py。"
+        ),
+    ),
+    "q4-v18": MethodSpec(
+        key="q4-v18",
+        problem=(4,),
+        params_ref="mathmodel2026b.strategy_v18:Q4V18Params",
+        strategy_ref="mathmodel2026b.strategy_v18:Q4V18Strategy",
+        overrides={},
+        final=True,
+        route_entry=True,
+        adds=(
+            "**问题4 最终交付**：v17 在线机制 + ① 知识矩阵负例（失败 /clear 的 20m "
+            "排除圆，与朝向无关）+ ② 可证明的覆盖式清除（25m 格铺满保守可行域，"
+            "格心到格内任意点 25/√2=17.678m<20m）+ ③ 代价模型（k≤2 时覆盖计划固定耗 "
+            "3k+2 秒严格低于『再测一次+清一次』的 11 秒，且带保证）"
+        ),
+        effect=(
+            "**520/520 局、6684/6684 源全清**（1–60 与 61–260 各自的混合与全定向压力"
+            "两个场景；对照 q4-v17 505/520、q4-v14 470/520）；"
+            "avg 中位在 6 个场景里有 5 个不高于 q4-v17（161–260 全定向 553.15 vs "
+            "556.62），机制只在原流程失败时才付代价（约 +0.4~2.6 s/局）"
+        ),
+        note=(
+            "覆盖保证的论证：把可行域 F 用边长 25m 的格铺开，任何 p∈F 都落在自己的本格"
+            "内（已被选中），而格心到 p 至多 25/√2=17.678m<20m，故完整执行计划必然命中。"
+            "格另外可以**安全剔除**：若格的四角都落在某个失败清除圆 B(q,20) 内，"
+            "整个格都在该圆内（范数凸性），而该圆内确定无源。"
+            "⚠️ 这是**条件性**保证：前提是『真值 ∈ F』（F 由保守可行域给出）且预算未耗尽；"
+            "计划被完整执行却没命中时策略会记 region_violated，说明前提被证伪。"
+            "有限仿真全清不等于对所有案例的概率 1 保证。"
         ),
     ),
 }
@@ -362,18 +595,27 @@ DECISION_METHODS: dict[str, MethodSpec] = {
 #:
 #: 问题3：``matrix``（知识矩阵）与 ``q3-v8``/``q3-v15``（同一血脉的迭代优化版）；
 #:        原始 ``q3`` 已过时（线上 500~680 s/源）。
-#: 问题4：``paper-q4``（论文冻结内核）与 ``q4-v14``（迭代优化版）；
+#: 问题4：``paper-q4``（论文冻结内核）与 ``q4-v18``（迭代优化版，最终交付）；
 #:        整条 matrix 路线（默认 12/30、axial 29/30）与 ``q4-v8``（10/30）、
-#:        ``q4-v9``（23/30）都不满足"确保全部清除"。
+#:        ``q4-v9``（23/30）都不满足"确保全部清除"；
+#:        ``q4-v17`` 虽有 60 种子 760/760，却在**持有集** 61–160 上只有 97/100，
+#:        因此降为冻结对照臂，不再作为交付入口（见 docs/review-fixes-2026-09-13.md）。
 ROUTE_ENTRIES: dict[int, dict[str, tuple[str, ...]]] = {
-    3: {"independent": ("matrix",), "iterated": ("q3-v8", "q3-v15")},
-    4: {"independent": ("paper-q4",), "iterated": ("q4-v14",)},
+    3: {"independent": ("matrix",), "iterated": ("q3-v8", "q3-v18")},
+    4: {"independent": ("paper-q4",), "iterated": ("q4-v18",)},
 }
 
-#: 路线内部的中间代（净收益为正，但不作为交付入口；供消融/回顾）。
+#: 路线内部的中间代 / 对照臂（不作为交付入口；供消融、A/B 与后撤回溯）。
 INTERMEDIATE_ENTRIES: dict[int, tuple[str, ...]] = {
-    3: ("q3-v5", "q3-v6", "q3-v7"),
-    4: ("q4-v9",),
+    3: ("q3-v5", "q3-v6", "q3-v7", "q3-v15"),
+    4: ("q4-v9", "q4-v14", "q4-v17"),
+}
+
+#: **负结果归档**：这些代已经移植进仓库（可跑、可消融、可复现），但实测为净亏，
+#: 列在这里是为了让 ``list_methods.py`` 能明确标注"不要选它"，而不是静默消失。
+NEGATIVE_ENTRIES: dict[int, tuple[str, ...]] = {
+    3: ("q3-v10", "q3-v11", "q3-v12", "q3-v13", "q3-v16"),
+    4: (),
 }
 
 
@@ -410,9 +652,17 @@ VERSION_ORDER: tuple[str, ...] = (
     "q3-v7",
     "q3-v8",
     "q3-v15",
+    "q3-v18",
     "q4-v8",
     "q4-v9",
     "q4-v14",
+    "q4-v17",
+    "q4-v18",
+    "q3-v10",
+    "q3-v11",
+    "q3-v12",
+    "q3-v13",
+    "q3-v16",
     "paper-q4",
 )
 
@@ -450,6 +700,8 @@ def method_tag(spec: "MethodSpec") -> str:
     """单个方法的状态标签（``list_methods.py`` 也用它，保证口径一致）。"""
     if spec.final:
         return "★ 最终交付"
+    if spec.negative_result:
+        return "✗ 负结果（勿选）"
     if spec.outdated:
         return "✗ 已过时"
     if spec.separate_route:
@@ -471,6 +723,8 @@ def describe_methods(problem: int | None = None, *, verbose: bool = False) -> st
             lines.append("          【另一条独立路线，非历代版本】")
         lines.append(f"          新增：{spec.adds}")
         lines.append(f"          效果：{spec.effect}")
+        if spec.negative_result:
+            lines.append("          ⚠️ 负结果归档：不要作为交付选项，仅用于复现/消融")
         if spec.outdated:
             lines.append("          ⚠️ 已过时：不要作为交付选项，仅用于回归/消融")
         if spec.fails_q4_requirement:
@@ -516,7 +770,9 @@ def q3_v15(params: Any | None = None):
     from .strategy_v15 import Q3V15Params, Q3V15Strategy
 
     if params is None:
-        params = Q3V15Params(or_opt_passes=OR_OPT_PASSES, **Q3_DELIVERY_PARAMS)
+        params = Q3V15Params(
+            or_opt_passes=OR_OPT_PASSES, **Q3_SCAN_PARAMS, **Q3_DELIVERY_PARAMS
+        )
     return Q3V15Strategy(params)
 
 
@@ -538,6 +794,28 @@ def q4_v14(params: Any | None = None):
     return Q4V14Strategy(params or Q4V14Params(**Q4_DELIVERY_PARAMS))
 
 
+def q3_v18(params: Any | None = None):
+    from .strategy_v18 import Q3V18Params, Q3V18Strategy
+
+    if params is None:
+        params = Q3V18Params(
+            or_opt_passes=OR_OPT_PASSES, **Q3_SCAN_PARAMS, **Q3_DELIVERY_PARAMS
+        )
+    return Q3V18Strategy(params)
+
+
+def q4_v17(params: Any | None = None):
+    from .strategy_v17 import Q4V17Params, Q4V17Strategy
+
+    return Q4V17Strategy(params or Q4V17Params(**Q4_DELIVERY_PARAMS))
+
+
+def q4_v18(params: Any | None = None):
+    from .strategy_v18 import Q4V18Params, Q4V18Strategy
+
+    return Q4V18Strategy(params or Q4V18Params(**Q4_DELIVERY_PARAMS))
+
+
 #: ``DecisionMethod`` = ``MethodSpec`` 的别名，给外部脚本一个语义化名字。
 DecisionMethod = MethodSpec
 
@@ -554,7 +832,7 @@ def _selftest() -> int:
             continue
         print(f"  OK   {key:<9} -> {type(strategy).__name__}")
     print(f"\n{len(available_methods())} 个决策方法，{failures} 个构造失败")
-    print("问题3 可选路线：matrix ／ q3-v8、q3-v15；问题4 可选路线：paper-q4 ／ q4-v14")
+    print("问题3 可选路线：matrix ／ q3-v8、q3-v18；问题4 可选路线：paper-q4 ／ q4-v18")
     return 1 if failures else 0
 
 

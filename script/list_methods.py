@@ -98,8 +98,13 @@ def render_routes(keys: list[str]) -> str:
             spec = DECISION_METHODS[k]
             if problem == 4 and spec.fails_q4_requirement:
                 why = "不满足『确保全部清除』，不是可选项"
-            else:
+            elif spec.negative_result:
+                why = ("负结果归档（已移植、可复现）—— "
+                       "勿选；见 docs/q34-version-lineage.md §4")
+            elif spec.outdated:
                 why = "已过时 / 仅作对照，非交付选项"
+            else:
+                why = "非交付选项（冻结对照臂 / 消融用）"
             lines.append(f"  ❌ {k:<9} {why}")
         lines.append("")
     return "\n".join(lines).rstrip()
@@ -115,6 +120,8 @@ def render_text(keys: list[str], *, verbose: bool) -> str:
             lines.append("    定位     : 另一条独立路线（与迭代优化版并列，非历代版本）")
         lines.append(f"    新增机制 : {spec.adds}")
         lines.append(f"    实测效果 : {spec.effect}")
+        if spec.negative_result:
+            lines.append("    ⚠️ 负结果 : 不要作为交付选项，仅用于复现/消融")
         if spec.outdated:
             lines.append("    ⚠️ 已过时 : 不要作为交付选项，仅用于回归/消融")
         if spec.fails_q4_requirement:
