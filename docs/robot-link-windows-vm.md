@@ -16,9 +16,16 @@
 | 3 | 解法（已生效）：在 **Windows 内**把外部地址的 2026 转给回环 —— `netsh interface portproxy` + 防火墙放行 TCP 2026。 |
 | 4 | 修复后两条路径都实测可用，往返时延 ~1 ms，30 次串行请求 30/30 成功。 |
 | 5 | 真正的探活必须发**真实 HTTP 请求**（`GET /` 或 `POST /enter`）。实测：**门控关闭时裸 TCP connect 依旧 100% 成功**（0–3 ms）——它永远区分不出"可用"与"门控关"，也区分不出"链路通"与"只通到转发器"。 |
-| 6 | 顺序很重要：**先删 portproxy → 再启动模拟器 → 最后加 portproxy**，否则模拟器可能报"端口被占用"。 |
-| 7 | **`request_id` 必须每次动作唯一**：复用同一个 id 的动作会被 HTTP **409** 拒绝（`{"accepted":false}`）。仓库里的 `HttpSimulatorClient` 每次调用都取 `uuid4().hex`，行为正确。 |
-| 8 | **完整协议已实测跑通**：`/enter → /measure → /exit` 全部 `accepted:true`，`measure_result`/`svd_deg` 正常返回（见 §3.4）。 |
+| 6 | **portproxy 必须绑具体地址（`10.0.2.15` / `192.168.122.161`），绝不能绑 `0.0.0.0`。** 实测：portproxy 占住 `0.0.0.0:2026` 后，模拟器启动时 `startup.log` 写 `machine-dog API port 2026 is unavailable`，robot API 起不来（见 §3.5）。 |
+| 7 | **Windows 的时区/时钟必须正确**：本机曾因时区为 Pacific Standard Time 使系统 UTC 偏差 **+15 小时**；模拟器据此判断是否已过测试截止时间，偏差可能导致直接拒绝开始测试（见 §3.6）。 |
+| 8 | **可以从 Linux 用 WinRM 直接操作 Windows 的 cmd.exe / powershell.exe**（本机 `pwsh` 缺 WSMan 客户端库，改用 pywinrm + NTLM，见 §4.4），改配置、看日志、验端口都不必到 VM 控制台。 |
+| 9 | **`request_id` 必须每次动作唯一**：复用同一个 id 的动作会被 HTTP **409** 拒绝（`{"accepted":false}`）。仓库里的 `HttpSimulatorClient` 每次调用都取 `uuid4().hex`，行为正确。 |
+| 10 | **完整协议已实测跑通**：`/enter → /measure → /exit` 全部 `accepted:true`，`measure_result`/`svd_deg` 正常返回（见 §3.4）。 |
+
+> **本次在 Windows 实机上做过的改动**（2026-09-13 11:2x，经 WinRM 执行，均可回滚）：
+> 1. 时区 `Set-TimeZone -Id 'China Standard Time'`，并用 Linux 的正确 UTC 校准系统时钟（见 §3.6）
+> 2. `portproxy`：删除 `0.0.0.0:2026` 那条，改为 `10.0.2.15:2026` 与 `192.168.122.161:2026` 两条（见 §3.5、§5.1）
+> 3. 未改动防火墙规则（`PortProxy 2026` 仍为 Allow / 所有配置文件）；未改动 libvirt 域 XML；未启动审计以外的任何程序
 
 ---
 
@@ -188,6 +195,71 @@ $ POST /enter  {"arena_id":"default"}（缺字段）   → HTTP 400 {"accepted":
      -d "{\"arena_id\":\"default\",\"robot_id\":\"<当前登录队号>\",\"request_id\":\"$(uuidgen | tr -d -)\"}"
    ```
 
+### 3.5 端口归属冲突：portproxy 绑 `0.0.0.0` 会让模拟器再也起不来（实测）
+
+时间线（2026-09-13）：
+
+| 时刻 | 事件 |
+| --- | --- |
+| 10:31 | 加 portproxy `0.0.0.0:2026 → 127.0.0.1:2026`。此时模拟器**已在运行**并占着 `127.0.0.1:2026`，两者共存，链路可用（§3.2 的 404+JSON 就是此时测到的） |
+| 10:42:37 | 演练结束后重启模拟器，`JammersSimulatorData/startup.log` 记录：**`machine-dog API port 2026 is unavailable`** —— GUI 起来了，但 robot API 没监听（`netstat` 里只剩 portproxy 的 `0.0.0.0:2026`） |
+| 11:09 | VM 重启；portproxy 随 `iphlpsvc` 自动恢复，**继续占着 `0.0.0.0:2026`** |
+| 11:21 | 远程检查确认：模拟器未运行，且 `127.0.0.1:2026` 无法绑定 |
+
+复现证据（WinRM 在 portproxy 绑 `0.0.0.0` 时执行绑定测试）：
+
+```
+bind 127.0.0.1:2026 -> 失败: An attempt was made to access a socket in a way forbidden by its access permissions
+```
+
+即 WSAEACCES。原因：Windows 里一旦 `0.0.0.0:P` 被占，后续对具体地址的同端口绑定会失败；
+而 IP Helper 是**带 SO_REUSEADDR** 的，所以它能压在已在监听的具体地址之上——
+**这个方向不对称**：`先模拟器、后 portproxy` 能共存，`先 portproxy、后模拟器` 就直接废掉模拟器。
+（`0.0.0.0` 这个绑定还会在每次开机由 `iphlpsvc` 抢先建立，所以重启后必然踩坑。）
+
+修正后的配置（已生效，见 §5.1）：portproxy 分别绑 `10.0.2.15` 与 `192.168.122.161`，把回环让给模拟器。
+
+| 校验项 | 修正后实测 |
+| --- | --- |
+| 绑定 `127.0.0.1:2026` | 可绑定 ✅ |
+| 绑定 `[::1]:2026` | 可绑定 ✅ |
+| 绑定 `0.0.0.0:2026` | 可绑定 ✅ |
+| `netsh interface portproxy show v4tov4` | `10.0.2.15:2026` 与 `192.168.122.161:2026` 各一条 |
+| Linux 路径 A `127.0.0.1:2026`（模拟器未启动） | curl 退码 52（Empty reply），2.0 s——连接到达 guest 后被关闭 ✅ |
+| Linux 路径 B `192.168.122.161:2026`（同上） | curl 退码 56（reset），2.0 s ✅ |
+
+### 3.6 时钟/时区：曾经的隐藏地雷（已修复）
+
+WinRM 读到的原始状态：
+
+```
+Zone  : Pacific Standard Time (-08:00；当时 DST 生效为 -07:00)
+Local : 2026-09-13 11:24:54 -07:00     ← 显示值"碰巧"等于北京时间
+UTC   : 2026-09-13 18:24:54            ← 真实 UTC 是 03:24:54，偏差 +15 小时
+w32tm : Source: Local CMOS Clock，Leap Indicator: 3(not synchronized)
+```
+
+成因：宿主 RTC 存的是**本地时间（北京时间）**，Windows 按其默认语义把 RTC 当"本地时间"读取，
+但 guest 时区却是 PST → 系统 UTC = RTC + 7h = 北京时间 + 7h，凭空多出 15 小时。
+
+为什么危险：模拟器用系统时间判断"是否已过测试开始截止时间"（`test_start_deadline = 2026-09-13T09:30:00Z`，
+见 `/api/v1/status`）。UTC 多 15 小时时它会认为早就截止，**正式测试可能直接无法开始**。
+
+修复（已生效）：
+
+```powershell
+Set-TimeZone -Id 'China Standard Time'          # 把时区改对
+# 再用外部基准校一次系统时钟（本次由 Linux 侧传入正确 UTC；也可 w32tm /resync）
+$ref = [DateTime]::Parse('<Linux 的 UTC ISO>', [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal)
+Set-Date -Date ([TimeZoneInfo]::ConvertTimeFromUtc($ref, [TimeZoneInfo]::Local))
+```
+
+修复后：`Zone = China Standard Time (+08:00)`、`Local = 2026-09-13 11:25 +08:00`、`UTC = 2026-09-13 03:25`（与 Linux 相差 <5 s）。
+因为宿主 RTC 是本地时间、guest 时区也是 +08:00，**重启后时间自洽**（Windows 关机时按本地时间写回 RTC）。
+
+遗留：`w32tm` 仍为 `Local CMOS Clock`（未同步 NTP），长期会缓慢漂移；正式测试前用 §4.4 复查一次即可。
+
 ---
 
 ## 4. 诊断命令（可直接复制）
@@ -224,6 +296,43 @@ Get-NetConnectionProfile | ft InterfaceAlias,NetworkCategory   # 虚拟网卡常
 Get-NetFirewallProfile | ft Name,Enabled,DefaultInboundAction
 ```
 
+### 4.4 从 Linux 用 WinRM 直接操作 Windows（cmd.exe / powershell.exe）
+
+**前提**：VM 上 WinRM 监听 5985（`curl -s -o /dev/null -w '%{http_code}' http://192.168.122.161:5985/wsman` 返回 **405** 即正常）。
+
+Linux 侧 `pwsh` **默认不带 WSMan 客户端库**（`libpsl-omi.so` 缺失、无 `PSWSMan` 模块，`New-PSSession -ComputerName` 用不了，补装需要 root），
+所以用 **pywinrm** 走 WSMan：
+
+```bash
+mkdir -p ~/_winrm && cd ~/_winrm
+python3 -m pip install --target ./pylibs "pywinrm[ntlm]"
+
+# 连（NTLM，坑：工作站不在域里，Kerberos 不可用；Basic 默认未开）
+python3 - <<'PY'
+import sys; sys.path.insert(0, "./pylibs")
+import winrm
+s = winrm.Session("http://192.168.122.161:5985/wsman",
+                  auth=("kfzovw", "<密码>"), transport="ntlm")
+print(s.run_cmd("hostname").std_out)                       # 走 cmd.exe
+print(s.run_ps("[DateTime]::UtcNow").std_out)              # 走 powershell.exe
+PY
+```
+
+落库的助手脚本（本次使用，位于工作区 `_probe2026/`，**非 git 仓库**）：
+
+| 文件 | 作用 |
+| --- | --- |
+| `_probe2026/wr.py` | `python3 wr.py cmd "<命令>"` / `wr.py ps "<脚本>"` / `wr.py probe`（身份+端口+portproxy） |
+| `_probe2026/remote_ps.py` | 把本地 `.ps1` 分块上传到 VM 执行并取回输出（`python3 remote_ps.py xxx.ps1 [参数]`） |
+| `_probe2026/winrm.env` | 主机/端口/账号密码（600 权限，勿提交） |
+
+远程执行连踩四个坑，助手里都处理了：
+
+1. **WinRS 命令行长度上限（约 8k）**：`run_ps` 会把脚本 base64 成 `-EncodedCommand`，长脚本必失败 → 分块（每块 1400 字符）上传到临时文件再执行。
+2. **默认 `ExecutionPolicy = Restricted`**：`& script.ps1` 报 `cannot be loaded because running scripts is disabled` → 执行前 `Set-ExecutionPolicy -Scope Process Bypass -Force`。
+3. **编码**：PS 5.1 对**无 BOM** 的 `.ps1` 按 ANSI 解码，中文会变乱码 → 上传字节时加 UTF-8 BOM；取回输出改为 base64（纯 ASCII）后在 Linux 解码，彻底绕开代码页问题。
+4. **改系统时钟会顶掉 WinRM 会话**：WSMan 用时间算超时，时钟一跳跃，当前会话的 cleanup 会返回 `HTTP 400`（重连即可；命令本身多半已生效）。
+
 ---
 
 ## 5. Windows 放行行为：怎么改、怎么查、怎么撤
@@ -234,24 +343,32 @@ Get-NetFirewallProfile | ft Name,Enabled,DefaultInboundAction
 ### 5.1 端口代理（netsh interface portproxy，需要管理员 CMD/PowerShell）
 
 ```cmd
-:: 查看现状（两行都在才说明配置生效）
+:: 查看现状
 netsh interface portproxy show all
 netsh interface portproxy show v4tov4
 
-:: 新增（当前采用：宿主机两条路径都能进）
-netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=2026 connectaddress=127.0.0.1 connectport=2026
+:: 当前采用（两条，都绑具体地址，把 127.0.0.1/[::1] 留给模拟器）
+::   · 10.0.2.15        服务 qemu SLIRP 路径（路径 A）
+::   · 192.168.122.161  服务 virbr0 直连路径（路径 B）
+netsh interface portproxy add v4tov4 listenaddress=10.0.2.15       listenport=2026 connectaddress=127.0.0.1 connectport=2026
+netsh interface portproxy add v4tov4 listenaddress=192.168.122.161 listenport=2026 connectaddress=127.0.0.1 connectport=2026
 
-:: 只想服务 qemu SLIRP 转发（路径 A），不暴露给 192.168.122.0/24 时用这条代替上面那条：
-netsh interface portproxy add v4tov4 listenaddress=10.0.2.15 listenport=2026 connectaddress=127.0.0.1 connectport=2026
+:: ⚠️ 不要用这条：它会把回环端口一起占住，模拟器再启动就会报
+::    startup.log: "machine-dog API port 2026 is unavailable"（见 §3.5）
+:: netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=2026 connectaddress=127.0.0.1 connectport=2026
 
-:: 删除（改配置前先删，见 §6 顺序）
-netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=2026
+:: 删除（例如改绑地址前）
+netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0          listenport=2026
+netsh interface portproxy delete v4tov4 listenaddress=10.0.2.15        listenport=2026
+netsh interface portproxy delete v4tov4 listenaddress=192.168.122.161 listenport=2026
 
-:: 依赖服务：IP Helper
+:: 依赖服务：IP Helper（当前：Running / Automatic）
 sc query iphlpsvc
 sc config iphlpsvc start= auto
 net start iphlpsvc
 ```
+
+> 接口地址会变（换网段、SLIRP 参数改动）时，先 `ipconfig` 确认，再按上面两条重建。
 
 要点：
 
@@ -321,25 +438,32 @@ netsh advfirewall set allprofiles state on
 
 ---
 
-## 6. 启动 / 重启 SOP（顺序错了会踩坑）
+## 6. 启动 / 重启 SOP
 
-1. **删掉 portproxy**：`netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=2026`
-   （`0.0.0.0:2026` 被 IP Helper 占着时，模拟器启动可能报"端口被占用"）
-2. 启动模拟器 GUI，`netstat -ano | findstr :2026` 确认**只有** `127.0.0.1:2026` 与 `[::1]:2026`
-3. 重新加回 portproxy（§5.1）并确认防火墙规则在（§5.2）
-4. **真实 HTTP 探测**：`curl -s --max-time 5 http://127.0.0.1:2026/` 期望拿到 `{"accepted":false,...}`
-   （此时门控可能还没开，见第 5 步）
-5. 在 GUI 里**开始演练/正式测试**（门控开启）
-6. Linux 侧跑：`cd mathModel2026B && python3 script/run.py --mode live`
+当前配置下是"常驻"的：portproxy 绑具体地址，模拟器随时启停都不冲突，**不需要每次删了再加**。
+
+1. 确认 portproxy 是具体地址两条（§5.1）——若是 `0.0.0.0` 那条，先删掉再加具体地址
+2. 启动模拟器 GUI（`C:\zWindowsUtility\Jammers-simulator-full\jammers-simulator-full.exe`）
+3. `netstat -ano | findstr :2026` 期望看到 **3 条**：`127.0.0.1:2026`、`[::1]:2026`（模拟器）+
+   `10.0.2.15:2026` / `192.168.122.161:2026`（IP Helper）
+   —— 若只有 IP Helper 那两条，去 `JammersSimulatorData\startup.log` 看是不是又报 `port 2026 is unavailable`
+4. 在 GUI 里**开始演练/正式测试**（门控开启）
+5. **真实 HTTP 探测**：`curl -s --max-time 5 http://127.0.0.1:2026/` → 期望 `{"accepted":false,...}`
+6. 先在演练里跑 §3.4 的 30 秒烟测，再跑：`cd mathModel2026B && python3 script/run.py --mode live`
    - 用非默认端口时：`--base-url http://127.0.0.1:<port>`，或先用 `preflight.py --robot-port <port>`
    - 环境变量：`JAMMERS_ROBOT_PORT=<port>`（`preflight.py` / `run_practice_online.py` 都读它）
+
+**万一还是遇到端口冲突**（历史上曾如此）：删 portproxy → 启模拟器 → 确认回环两条在 → 再加回具体地址两条。
 
 ---
 
 ## 7. 正式测试前 checklist
 
-- [ ] Windows `netstat` 里 `0.0.0.0:2026`(portproxy) 与 `127.0.0.1:2026`(模拟器) 同时在
-- [ ] 防火墙规则启用：`Get-NetFirewallRule -DisplayName "PortProxy 2026" | ft Enabled,Profile,Action`
+- [ ] 时钟正确：`Get-TimeZone` = China Standard Time；`[DateTime]::UtcNow` 与 Linux `date -u` 相差 < 10 s（§3.6）
+- [ ] portproxy 是**具体地址**两条（绝不能有 `0.0.0.0:2026`），`iphlpsvc` = Running/Automatic
+- [ ] Windows `netstat` 里同时有 模拟器的 `127.0.0.1:2026`/`[::1]:2026` 与 IP Helper 的两条
+- [ ] `JammersSimulatorData\startup.log` 最后几行**没有** `machine-dog API port 2026 is unavailable`
+- [ ] 防火墙规则启用：`Get-NetFirewallRule -DisplayName "PortProxy 2026" | ft Enabled,Action,Profile`
 - [ ] GUI 里测试处于进行中（门控开）→ 此时 `curl http://127.0.0.1:2026/` 应返回 **JSON**
       （若返回 `Empty reply`/`RemoteDisconnected`，说明门控还没开，见 §3.3，**不是网络问题**）
 - [ ] **先在演练里跑一遍 §3.4 的 30 秒烟测**（`/enter → /measure → /exit`，每个动作换新 `request_id`），
@@ -355,12 +479,19 @@ netsh advfirewall set allprofiles state on
 
 | 坑 | 现象 | 处理 |
 | --- | --- | --- |
+| **portproxy 绑 `0.0.0.0:2026`** | 模拟器启动时 `startup.log` 报 `machine-dog API port 2026 is unavailable`，robot API 不监听；重启后 `iphlpsvc` 抢先占位，必然复现 | 改成绑具体地址 `10.0.2.15` / `192.168.122.161`（§5.1、§3.5） |
+| **Windows 时区/时钟不对** | 系统 UTC 与真实 UTC 差 15 小时（曾为 PST），模拟器误判"已过测试截止时间" | `Set-TimeZone -Id 'China Standard Time'` + 校时（§3.6） |
 | `smb=/home/kfz/share` 写死在 `qemu:commandline` | 目录不存在时 **qemu 直接启动失败**（`Error accessing shared directory`），虚机起不来 | 保证 `/home/kfz/share` 存在，或用 `virsh edit win10` 去掉 `smb=` |
 | `net1` 占 `addr=0x09.0` | 若把 qxl-vga 也放到 `0x1` 会报 `PCI: slot 1 function 0 not available ... in use by e1000e,id=net1` | 改 XML 时避开已用 `addr` |
 | 宿主机 2026 被 qemu hostfwd 占用 | 本地 mock 起不来；`ssh -R 127.0.0.1:2026:...` 也会 `remote port forwarding failed` | 换端口（`JAMMERS_ROBOT_PORT`），或在 XML 里改/去掉 hostfwd |
 | 宿主机 `0.0.0.0:2026` 暴露面 | hostfwd 默认监听所有网卡（含 wlan0 `10.243.5.44`、tailscale），同网段机器可访问该接口 | 需要收紧就把 XML 改成 `hostfwd=tcp:127.0.0.1:2026-:2026`（`virsh edit win10` 后重启域） |
 | 中间转发器给的"假通" | connect 成功但无响应（见 §2/§3.1） | 一律用真实 HTTP 探测判活 |
 | 门控（portguard） | 非测试期间连接被直接关闭 / 无 HTTP 响应 | 先在 GUI 开始测试，再排查网络 |
+| 用 WinRM 跑长脚本 | `The command line is too long.` | 分块上传到临时文件再执行（§4.4） |
+| 用 WinRM 跑 `.ps1` | `running scripts is disabled on this system` | 先 `Set-ExecutionPolicy -Scope Process Bypass -Force` |
+| WinRM 返回中文乱码 | 英文版 Windows 控制台代码页 + 无 BOM 的 `.ps1` | 上传加 UTF-8 BOM，取回走 base64（§4.4） |
+| 改系统时钟后 WinRM 报 `HTTP 400` | WSMan 用时间算超时，时钟跳跃使当前会话失效 | 重连即可，命令通常已生效 |
+| 模拟器 exe 所在目录名含零宽字符 | `C:\zW\u200cindowsUtility\...`，手敲/复制路径容易失败 | 用 `Get-ChildItem 'C:\' -Filter 'jammers-simulator*.exe' -Recurse -Depth 3` 定位 |
 
 ---
 
@@ -375,4 +506,8 @@ netsh advfirewall set allprofiles state on
 | Windows portproxy 配置 | `netsh interface portproxy show all`；注册表 `HKLM\SYSTEM\CurrentControlSet\Services\PortProxy` |
 | Windows 防火墙规则 | `netsh advfirewall firewall show rule name="PortProxy 2026" verbose` |
 | Windows 防火墙拦截日志 | `%systemroot%\system32\LogFiles\Firewall\pfirewall.log` |
+| **模拟器启动日志（排端口冲突首选）** | `C:\zW\u200cindowsUtility\Jammers-simulator-full\JammersSimulatorData\startup.log` |
+| 模拟器行为日志 / 上报队列 | 同目录 `behavior-logs\`、`behavior-runs\`、`*-statistics-queue.sqlite3`、`upload-queue.sqlite3` |
+| 模拟器可执行文件 | `C:\zW\u200cindowsUtility\Jammers-simulator-full\jammers-simulator-full.exe` |
+| WinRM 远端执行助手（本次使用） | `_probe2026/wr.py`、`_probe2026/remote_ps.py`、凭据 `_probe2026/winrm.env`（非 git 仓库） |
 | 客户端默认地址 | `framework/src/mathmodel2026b/client.py`（`http://127.0.0.1:2026`）、`script/run.py`（`DEFAULT_ROBOT_URL`） |
