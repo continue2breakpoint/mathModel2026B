@@ -50,4 +50,4 @@ D(P)=\max_{1\le i,j\le m}\norm{V_i-V_j}.
 最小包围圆由两个对径支撑点或三个非共线支撑点确定。可用随机增量算法计算，期望时间为 $O(m)$；最后逐顶点核验，并取实际最大顶点距离作为认证半径。
 
 因此，$D\le40\,\mathrm m$ 只是可用一个20米圆覆盖的必要条件，$D\le20\sqrt3\,\mathrm m$ 是充分条件；直接计算 $r_*\le20\,\mathrm m$ 才是准确判据。若使用外包络 $\widehat K$，该判据仍然充分，但可能偏保守。
-\placeholder{直径圆与最小包围圆的区别}{并列绘制一个平行四边形与一个等边三角形。标出直径端点、直径圆圆心、半径；三角形第三顶点落在直径圆外，再画其外接圆。注明示意图不按实际距离比例。}
+\begin{figure}[htbp]\centering\includegraphics[width=.88\linewidth]{figures/diameter.pdf}\caption{直径圆与最小包围圆的区别；几何示意不表示实测案例。}\end{figure}

@@ -1,0 +1,52 @@
+{
+  "matrix": {
+    "radius_lower": 1100.0,
+    "radius_upper": 1400.142849854971,
+    "actual_radius": 1200.0,
+    "plan_radius": 1050.0,
+    "mask_uncovered_count": 2,
+    "optical_failure_distance": 30.0,
+    "matrix_open_route_m": 6421.14373364237
+  },
+  "coverage": [
+    {
+      "n": 6,
+      "ring": 1130.0,
+      "analytic": 996.9496764656195,
+      "sampled": 996.9496764656195
+    },
+    {
+      "n": 6,
+      "ring": 1200.0,
+      "analytic": 968.9015717043836,
+      "sampled": 968.9015717043836
+    },
+    {
+      "n": 8,
+      "ring": 1010.0,
+      "analytic": 949.1438351424727,
+      "sampled": 949.1438351424727
+    },
+    {
+      "n": 6,
+      "ring": 1800.0,
+      "analytic": 1039.2304845413264,
+      "sampled": 1038.346857643166
+    },
+    {
+      "n": 3,
+      "ring": 1000.0,
+      "analytic": 1562.0499351813307,
+      "sampled": 1562.0499351813307
+    }
+  ],
+  "posterior_mean": 855.263157894737,
+  "posterior_mean_direction": 855.2766096306785,
+  "candidate_margin": 3.5563237191978487,
+  "candidate_sampled_worst_gap": -3.5563237191978487,
+  "outer_polygon_error": 0.9642588187895207,
+  "fallback_points": 225,
+  "fallback_path_m": 4097.860965592527,
+  "fallback_cell_radius": 13.272024058636788,
+  "historical_median_improvement_percent": 3.802041000632167
+}

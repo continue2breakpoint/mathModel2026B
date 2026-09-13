@@ -4,9 +4,10 @@
 \usepackage{fontspec}
 \usepackage{babel}
 \babelprovide[import,main]{chinese}
-\babelfont{rm}{Noto Serif CJK SC}
+\babelfont{rm}[ItalicFont={Noto Serif CJK SC}]{Noto Serif CJK SC}
 \babelfont{sf}{Noto Sans CJK SC}
 \babelfont{tt}{DejaVu Sans Mono}
+\newfontfamily\codefont{Noto Sans Mono CJK SC}
 \usepackage{amsmath,amssymb,amsthm,booktabs,longtable,array}
 \usepackage{xcolor,graphicx,fancyhdr,fancyvrb}
 \usepackage[unicode,hidelinks]{hyperref}
@@ -19,6 +20,7 @@
 \renewcommand{\headrulewidth}{0pt}
 \renewcommand{\figurename}{图}\renewcommand{\tablename}{表}
 \renewcommand{\refname}{参考文献}
+\theoremstyle{definition}
 \newtheorem{proposition}{命题}[section]
 \renewcommand{\proofname}{证明}
 \newcommand{\R}{\mathbb R}
@@ -27,26 +29,29 @@
 \newcommand{\eps}{\varepsilon}
 \newcommand{\ind}{\mathbf 1}
 \newcommand{\placeholder}[2]{\begin{figure}[htbp]\centering\fbox{\parbox{0.90\linewidth}{\small [#2]}}\caption{#1}\end{figure}}
-\lstset{basicstyle=\ttfamily\scriptsize,breaklines=true,columns=fullflexible,keepspaces=true,showstringspaces=false,frame=single,numbers=left,numberstyle=\tiny,numbersep=5pt}
+\lstset{basicstyle=\codefont\scriptsize,breaklines=true,columns=fullflexible,keepspaces=true,showstringspaces=false,frame=single,numbers=left,numberstyle=\tiny,numbersep=5pt}
 \begin{document}
 \begin{center}
 {\LARGE\bfseries 基于知识矩阵与集合估计的\\[0.25em]无线电干扰源自适应定位与清除}\par
 \vspace{1em}{\large\bfseries 摘要}
 \end{center}
-针对未知数量无线电干扰源的自动定位与清除问题，建立“区域覆盖发现—交会集合估计—近距补测—认证清除”的模型。示向误差仅有区间界，故以包含真实位置的可行域作为状态，避免把同地点重复读数视为独立样本。
+针对未知数量、位置及发射方向的无线电干扰源定位清除问题，建立知识矩阵、集合估计与覆盖认证相结合的自适应模型，以全部清除为约束，以移动、切频、检测和光学清除的虚拟总耗时为目标。
 
-对问题一，将示向度约束写成两个半平面，利用逐边裁剪构造定位多边形，以顶点对最大距离计算直径，并给出旋转卡壳加速方法。证明直径为 $D$ 的区域不一定能被半径 $D/2$ 的圆覆盖；清除应采用最小包围圆半径不超过 $20\,\mathrm m$ 的判据。
+对问题一，将示向误差区间表示为两个半平面，逐次裁剪形成交会定位区域，利用顶点对距离或旋转卡壳计算直径。通过等边三角形反例说明直径圆未必覆盖区域，并以最小包围圆半径不超过20米作为单点保证清除判据。
 
-对问题二，利用同一干扰源有效接收半径固定的性质，构造保证再次接收到信号的候选区域，并加入交会角约束。在第一检测点位于圆心、附加均匀先验的参考情形下，给出沿示向线前进约 $850\,\mathrm m$、横移约 $520\,\mathrm m$ 的候选点；一般位置需根据目标圆域重新裁剪和评价。概率仅用于候选点排序，确定性结论不依赖该先验。
+对问题二，利用同一源接收半径固定的性质，推导三个1000米圆盘交集构成的稳健接收区域，再用名义交会角筛选候选点。圆心首测、附加均匀先验下的参考选点为沿示向前进850米、横移520米，接收裕量约3.56米；一般首测位置按目标圆重新裁剪，不宣称两次测向必能清除。
 
-对问题三，设计以频道为行、路径位置为列、结构化反馈为单元格的稀疏知识矩阵。该结构按行汇集目标证据，按列组织共享停点检测，将正观测、无信号、近距及清除结果统一用于后续决策。由矩阵生成逐频道可行域与接收半径界，再以位掩码维护覆盖缺口，形成选择性扫描、成批精化、分段逼近及缺口补测的闭环。与 q3 基线相比，matrix 的改进集中于负证据利用、多个目标共享移动和减少重复确认。本文以 matrix 为主方案，真实线上演练的提升幅度与阶段归因在实验部分预留；历史本地模拟作为独立补充。第四问解法与正式测试结果预留。
+对问题三，以频道与路径位置构造知识矩阵，将七点覆盖扫描与已发现目标合并调度，通过最近邻、2-opt及or-opt滚动缩短路线。利用清除失败的20米排除圆和25米方格覆盖，实现直接试清、必要补测和覆盖兜底。最终配置在本地种子61至160的100例中全部清除，每源时间中位数272.08秒；消融表明主要时间收益来自布局与路由调整。
 
-\noindent\textbf{关键词：}知识矩阵；集合估计；位掩码覆盖；批量补测；自适应决策
+对问题四，证明任意定向半圆被检测点命中等价于源位置处于1000米内检测点的凸包，采用24点联合优化布局，并以递归单元数值证书检验连续域覆盖。以方向无关的光学覆盖修补波束背面及射线误差造成的清除失败。已有混合与全定向压力测试共520例、6684个源全部清除。两场官方演练中，问题三清除14/14个源、239.82秒/源，问题四清除15/15个源、422.64秒/源。演练与正式测试分别记录；覆盖保证以保守域含真值、格心可达及计划完整执行为前提。
+
+\noindent\textbf{关键词：}知识矩阵；集合估计；局部凸包；联合调度；覆盖式清除
 \clearpage
 \input{sections/01-foundation}
 \input{sections/02-q1}
 \input{sections/03-q2}
 \input{sections/04-q3}
+\input{sections/04-q4}
 \input{sections/05-evaluation}
 \begin{thebibliography}{9}
 \bibitem{problem} 2026年高教社杯全国大学生数学建模竞赛B题：无线电干扰源的快速自动定位与清除（题目及附录1--4）.
@@ -54,6 +59,6 @@
 \end{thebibliography}
 \clearpage\appendix
 \input{sections/06-derivations}
-\input{sections/08-local-records}
+
 \input{sections/07-code}
 \end{document}

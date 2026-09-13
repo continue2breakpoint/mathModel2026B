@@ -1,0 +1,209 @@
+{
+  "legacy_timing": false,
+  "seed_sets": {
+    "1-30": {
+      "v8 (基线)": {
+        "n_cases": 30,
+        "full_clear_cases": 30,
+        "cleared_sources": 389,
+        "total_sources": 389,
+        "avg_median": 265.92,
+        "avg_mean": 270.23,
+        "vt_median": 3435.8,
+        "vt_total": 103530.5,
+        "elapsed_s": 1.71
+      },
+      "v15-legacy (7/1110/2, o0)": {
+        "n_cases": 30,
+        "full_clear_cases": 30,
+        "cleared_sources": 389,
+        "total_sources": 389,
+        "avg_median": 272.41,
+        "avg_mean": 272.35,
+        "vt_median": 3481.2,
+        "vt_total": 104384.0,
+        "elapsed_s": 2.73
+      },
+      "v15-final-o0 (6/1130/3, o0)": {
+        "n_cases": 30,
+        "full_clear_cases": 30,
+        "cleared_sources": 389,
+        "total_sources": 389,
+        "avg_median": 263.81,
+        "avg_mean": 268.35,
+        "vt_median": 3366.7,
+        "vt_total": 102920.8,
+        "elapsed_s": 2.53
+      },
+      "v15-final-o4 (6/1130/3, o4)": {
+        "n_cases": 30,
+        "full_clear_cases": 30,
+        "cleared_sources": 389,
+        "total_sources": 389,
+        "avg_median": 256.68,
+        "avg_mean": 266.8,
+        "vt_median": 3375.9,
+        "vt_total": 102251.2,
+        "elapsed_s": 2.72
+      },
+      "v18-final-o0 (覆盖清除 only)": {
+        "n_cases": 30,
+        "full_clear_cases": 30,
+        "cleared_sources": 389,
+        "total_sources": 389,
+        "avg_median": 263.24,
+        "avg_mean": 268.2,
+        "vt_median": 3360.7,
+        "vt_total": 102860.5,
+        "elapsed_s": 2.81
+      },
+      "v18-final-o4 (当前交付)": {
+        "n_cases": 30,
+        "full_clear_cases": 30,
+        "cleared_sources": 389,
+        "total_sources": 389,
+        "avg_median": 256.11,
+        "avg_mean": 266.55,
+        "vt_median": 3365.4,
+        "vt_total": 102143.6,
+        "elapsed_s": 3.0
+      }
+    },
+    "1-60": {
+      "v8 (基线)": {
+        "n_cases": 60,
+        "full_clear_cases": 60,
+        "cleared_sources": 760,
+        "total_sources": 760,
+        "avg_median": 278.1,
+        "avg_mean": 279.45,
+        "vt_median": 3437.6,
+        "vt_total": 208897.6,
+        "elapsed_s": 3.37
+      },
+      "v15-legacy (7/1110/2, o0)": {
+        "n_cases": 60,
+        "full_clear_cases": 60,
+        "cleared_sources": 760,
+        "total_sources": 760,
+        "avg_median": 281.94,
+        "avg_mean": 280.76,
+        "vt_median": 3490.1,
+        "vt_total": 209897.9,
+        "elapsed_s": 5.39
+      },
+      "v15-final-o0 (6/1130/3, o0)": {
+        "n_cases": 60,
+        "full_clear_cases": 60,
+        "cleared_sources": 760,
+        "total_sources": 760,
+        "avg_median": 277.46,
+        "avg_mean": 277.28,
+        "vt_median": 3398.7,
+        "vt_total": 207296.6,
+        "elapsed_s": 5.18
+      },
+      "v15-final-o4 (6/1130/3, o4)": {
+        "n_cases": 60,
+        "full_clear_cases": 60,
+        "cleared_sources": 760,
+        "total_sources": 760,
+        "avg_median": 275.51,
+        "avg_mean": 274.46,
+        "vt_median": 3383.7,
+        "vt_total": 205255.8,
+        "elapsed_s": 5.49
+      },
+      "v18-final-o0 (覆盖清除 only)": {
+        "n_cases": 60,
+        "full_clear_cases": 60,
+        "cleared_sources": 760,
+        "total_sources": 760,
+        "avg_median": 277.45,
+        "avg_mean": 277.21,
+        "vt_median": 3399.1,
+        "vt_total": 207237.4,
+        "elapsed_s": 5.76
+      },
+      "v18-final-o4 (当前交付)": {
+        "n_cases": 60,
+        "full_clear_cases": 60,
+        "cleared_sources": 760,
+        "total_sources": 760,
+        "avg_median": 275.54,
+        "avg_mean": 274.32,
+        "vt_median": 3381.5,
+        "vt_total": 205131.4,
+        "elapsed_s": 6.03
+      }
+    },
+    "61-160": {
+      "v8 (基线)": {
+        "n_cases": 100,
+        "full_clear_cases": 100,
+        "cleared_sources": 1283,
+        "total_sources": 1283,
+        "avg_median": 278.02,
+        "avg_mean": 275.55,
+        "vt_median": 3471.6,
+        "vt_total": 348115.9,
+        "elapsed_s": 5.72
+      },
+      "v15-legacy (7/1110/2, o0)": {
+        "n_cases": 100,
+        "full_clear_cases": 100,
+        "cleared_sources": 1283,
+        "total_sources": 1283,
+        "avg_median": 279.29,
+        "avg_mean": 276.43,
+        "vt_median": 3483.9,
+        "vt_total": 349253.5,
+        "elapsed_s": 9.4
+      },
+      "v15-final-o0 (6/1130/3, o0)": {
+        "n_cases": 100,
+        "full_clear_cases": 100,
+        "cleared_sources": 1283,
+        "total_sources": 1283,
+        "avg_median": 278.74,
+        "avg_mean": 273.83,
+        "vt_median": 3469.5,
+        "vt_total": 346350.8,
+        "elapsed_s": 8.99
+      },
+      "v15-final-o4 (6/1130/3, o4)": {
+        "n_cases": 100,
+        "full_clear_cases": 100,
+        "cleared_sources": 1283,
+        "total_sources": 1283,
+        "avg_median": 271.65,
+        "avg_mean": 271.09,
+        "vt_median": 3421.2,
+        "vt_total": 343289.9,
+        "elapsed_s": 9.65
+      },
+      "v18-final-o0 (覆盖清除 only)": {
+        "n_cases": 100,
+        "full_clear_cases": 100,
+        "cleared_sources": 1283,
+        "total_sources": 1283,
+        "avg_median": 278.74,
+        "avg_mean": 273.73,
+        "vt_median": 3470.1,
+        "vt_total": 346211.2,
+        "elapsed_s": 9.92
+      },
+      "v18-final-o4 (当前交付)": {
+        "n_cases": 100,
+        "full_clear_cases": 100,
+        "cleared_sources": 1283,
+        "total_sources": 1283,
+        "avg_median": 272.08,
+        "avg_mean": 271.07,
+        "vt_median": 3419.5,
+        "vt_total": 343264.5,
+        "elapsed_s": 10.51
+      }
+    }
+  }
+}

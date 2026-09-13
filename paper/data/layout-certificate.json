@@ -1,0 +1,521 @@
+{
+  "generated_by": "script/verify_layout_certificate.py",
+  "generated_at": "2026-09-13 14:14:57",
+  "omega_m": 1800.0,
+  "radius_m": 1000.0,
+  "quick": false,
+  "caveats": {
+    "brute_scan_is_finite_sample": "0.25° 扫描是有限样本：样本最大正面距离（例如 v17 的 989.8 m）不能直接称作连续域最坏真值，0.25° 也不能自动消除盲区。它只能证伪。",
+    "quadtree_is_numerical_certificate": "四叉树证书是连续区域的**数值**证书：使用浮点凸包与向内余量，没有做区间算术形式化验证。它证明的是半径 1000 m 下的覆盖，不宣称精确最坏值就是 989.8 m。",
+    "closed_half_disk_convention": "证书对应题面闭半圆盘（n·(q-x) ≥ 0）的等价判据；框架检测实现用严格 proj > 0（更强）。边界朝向仍需物理裕量，证书不对该裕量负责。",
+    "sample_domain_must_be_inside_omega": "采样类检查只在目标圆（半径 1800 m）内取样。快照 _verify_layout.py 的随机扫描在半径 2000 m 的盘内取点，其 worst=inf 出现在 1964.1 m 处（Ω 之外），不是布局缺陷。"
+  },
+  "layouts": {
+    "v17": {
+      "name": "LAYOUT_Q4_V17（q4-v17 / q4-v18 继承）",
+      "source": "mathmodel2026b.strategy_v17.LAYOUT_Q4_V17",
+      "role": "交付发现层布局（24 点）",
+      "n_points": 24,
+      "route_len_m_of_given_order": 18507.5,
+      "points_in_order": [
+        [
+          74.8,
+          29.7
+        ],
+        [
+          480.4,
+          -745.5
+        ],
+        [
+          -401.8,
+          -781.5
+        ],
+        [
+          -901.7,
+          19.8
+        ],
+        [
+          -453.4,
+          768.2
+        ],
+        [
+          -903.7,
+          1585.9
+        ],
+        [
+          -1662.3,
+          1016.2
+        ],
+        [
+          -1345.0,
+          758.9
+        ],
+        [
+          -1820.9,
+          12.9
+        ],
+        [
+          -1379.9,
+          -759.1
+        ],
+        [
+          -1674.8,
+          -1006.7
+        ],
+        [
+          -895.3,
+          -1593.3
+        ],
+        [
+          -16.3,
+          -1565.4
+        ],
+        [
+          75.0,
+          -1970.9
+        ],
+        [
+          938.7,
+          -1565.4
+        ],
+        [
+          1725.4,
+          -934.5
+        ],
+        [
+          1345.0,
+          -742.7
+        ],
+        [
+          1003.8,
+          97.7
+        ],
+        [
+          1900.8,
+          35.5
+        ],
+        [
+          1616.0,
+          890.0
+        ],
+        [
+          1014.6,
+          1586.5
+        ],
+        [
+          577.6,
+          871.6
+        ],
+        [
+          39.0,
+          1565.4
+        ],
+        [
+          60.6,
+          1964.9
+        ]
+      ],
+      "check1_continuous_cell_sufficient": {
+        "ok": true,
+        "method": "quadtree-cell-sufficient-condition",
+        "checked": 3107,
+        "passed": 1992,
+        "unresolved": [],
+        "unresolved_count": 0,
+        "remaining": 0,
+        "discarded": 1354,
+        "max_depth": 13,
+        "truncated": false,
+        "min_side": 0.02,
+        "margin": 1e-07,
+        "radius": 1000.0,
+        "omega": 1800.0,
+        "n_points": 24,
+        "elapsed_s": 0.12
+      },
+      "check2a_multiresolution_grid": {
+        "ok": true,
+        "safety": 12.0,
+        "threshold": 988.0,
+        "rows": [
+          {
+            "step": 60.0,
+            "n_phi": 36,
+            "n_grid_points": 3541,
+            "worst": 980.4442234960388,
+            "worst_at_xy_n": [
+              -845.049,
+              1589.306,
+              0.0,
+              1.0
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.02
+          },
+          {
+            "step": 40.0,
+            "n_phi": 60,
+            "n_grid_points": 7081,
+            "worst": 980.4442234960388,
+            "worst_at_xy_n": [
+              -845.049,
+              1589.306,
+              0.0,
+              1.0
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.054
+          },
+          {
+            "step": 30.0,
+            "n_phi": 75,
+            "n_grid_points": 12009,
+            "worst": 983.2540888956349,
+            "worst_at_xy_n": [
+              -1799.726,
+              -31.414,
+              -0.895712,
+              -0.444635
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.108
+          },
+          {
+            "step": 25.0,
+            "n_phi": 90,
+            "n_grid_points": 16961,
+            "worst": 983.2540888956349,
+            "worst_at_xy_n": [
+              -1799.726,
+              -31.414,
+              -0.882948,
+              -0.469472
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.178
+          },
+          {
+            "step": 20.0,
+            "n_phi": 120,
+            "n_grid_points": 26165,
+            "worst": 983.2540888956349,
+            "worst_at_xy_n": [
+              -1799.726,
+              -31.414,
+              -0.891007,
+              -0.45399
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.347
+          },
+          {
+            "step": 16.0,
+            "n_phi": 150,
+            "n_grid_points": 40448,
+            "worst": 983.2540888956349,
+            "worst_at_xy_n": [
+              -1799.726,
+              -31.414,
+              -0.895712,
+              -0.444635
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.651
+          }
+        ],
+        "worst_over_grids": 983.2540888956349
+      },
+      "check2b_hull_cross_check": {
+        "ok": true,
+        "n_samples": 2000,
+        "n_violations": 0,
+        "violations": [],
+        "sample_step": 30.0,
+        "seed": 4242
+      },
+      "check3_brute_scan": {
+        "ok": true,
+        "worst": 989.7888079316209,
+        "worst_at_xy_n": [
+          -839.496,
+          -1592.246,
+          0.021815,
+          -0.999762
+        ],
+        "n_points_without_frontal": 0,
+        "n_samples": 19200,
+        "n_random_samples": 12000,
+        "ring_deg": 0.05,
+        "n_phi": 1440,
+        "angle_resolution_deg": 0.25,
+        "seed": 777,
+        "elapsed_s": 2.61,
+        "is_whole_domain_proof": false
+      },
+      "all_checks_ok": true,
+      "elapsed_s": 4.166
+    },
+    "v9": {
+      "name": "v9 两圈式（two_tier_nodes(950,1750,12,1900)）",
+      "source": "mathmodel2026b.strategy_v9.two_tier_nodes",
+      "role": "方法一/初始解与兜底（25 点）",
+      "n_points": 25,
+      "route_len_m_of_given_order": 37881.9,
+      "points_in_order": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          950.0,
+          0.0
+        ],
+        [
+          -950.0,
+          0.0
+        ],
+        [
+          475.0,
+          822.7
+        ],
+        [
+          -475.0,
+          822.7
+        ],
+        [
+          1425.0,
+          822.7
+        ],
+        [
+          -1425.0,
+          822.7
+        ],
+        [
+          475.0,
+          -822.7
+        ],
+        [
+          -475.0,
+          -822.7
+        ],
+        [
+          1425.0,
+          -822.7
+        ],
+        [
+          -1425.0,
+          -822.7
+        ],
+        [
+          0.0,
+          1645.4
+        ],
+        [
+          0.0,
+          -1645.4
+        ],
+        [
+          1900.0,
+          0.0
+        ],
+        [
+          1645.4,
+          950.0
+        ],
+        [
+          950.0,
+          1645.4
+        ],
+        [
+          0.0,
+          1900.0
+        ],
+        [
+          -950.0,
+          1645.4
+        ],
+        [
+          -1645.4,
+          950.0
+        ],
+        [
+          -1900.0,
+          0.0
+        ],
+        [
+          -1645.4,
+          -950.0
+        ],
+        [
+          -950.0,
+          -1645.4
+        ],
+        [
+          -0.0,
+          -1900.0
+        ],
+        [
+          950.0,
+          -1645.4
+        ],
+        [
+          1645.4,
+          -950.0
+        ]
+      ],
+      "check1_continuous_cell_sufficient": {
+        "ok": true,
+        "method": "quadtree-cell-sufficient-condition",
+        "checked": 1537,
+        "passed": 1084,
+        "unresolved": [],
+        "unresolved_count": 0,
+        "remaining": 0,
+        "discarded": 276,
+        "max_depth": 7,
+        "truncated": false,
+        "min_side": 0.02,
+        "margin": 1e-07,
+        "radius": 1000.0,
+        "omega": 1800.0,
+        "n_points": 25,
+        "elapsed_s": 0.059
+      },
+      "check2a_multiresolution_grid": {
+        "ok": true,
+        "safety": 12.0,
+        "threshold": 988.0,
+        "rows": [
+          {
+            "step": 60.0,
+            "n_phi": 36,
+            "n_grid_points": 3541,
+            "worst": 962.4896041591514,
+            "worst_at_xy_n": [
+              0.0,
+              -1800.0,
+              1.0,
+              0.0
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.016
+          },
+          {
+            "step": 40.0,
+            "n_phi": 60,
+            "n_grid_points": 7081,
+            "worst": 962.4896041591514,
+            "worst_at_xy_n": [
+              0.0,
+              -1800.0,
+              1.0,
+              0.0
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.055
+          },
+          {
+            "step": 30.0,
+            "n_phi": 75,
+            "n_grid_points": 12009,
+            "worst": 962.4896041591514,
+            "worst_at_xy_n": [
+              0.0,
+              -1800.0,
+              1.0,
+              0.0
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.129
+          },
+          {
+            "step": 25.0,
+            "n_phi": 90,
+            "n_grid_points": 16961,
+            "worst": 962.4896041591514,
+            "worst_at_xy_n": [
+              0.0,
+              -1800.0,
+              1.0,
+              0.0
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.196
+          },
+          {
+            "step": 20.0,
+            "n_phi": 120,
+            "n_grid_points": 26165,
+            "worst": 962.4896041591514,
+            "worst_at_xy_n": [
+              0.0,
+              -1800.0,
+              1.0,
+              0.0
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.362
+          },
+          {
+            "step": 16.0,
+            "n_phi": 150,
+            "n_grid_points": 40448,
+            "worst": 962.4896041591518,
+            "worst_at_xy_n": [
+              -0.0,
+              -1800.0,
+              -1.0,
+              0.0
+            ],
+            "n_points_without_frontal": 0,
+            "ok": true,
+            "elapsed_s": 0.68
+          }
+        ],
+        "worst_over_grids": 962.4896041591518
+      },
+      "check2b_hull_cross_check": {
+        "ok": true,
+        "n_samples": 2000,
+        "n_violations": 0,
+        "violations": [],
+        "sample_step": 30.0,
+        "seed": 4242
+      },
+      "check3_brute_scan": {
+        "ok": true,
+        "worst": 962.489604159151,
+        "worst_at_xy_n": [
+          1558.846,
+          900.0,
+          -0.5,
+          0.866025
+        ],
+        "n_points_without_frontal": 0,
+        "n_samples": 19200,
+        "n_random_samples": 12000,
+        "ring_deg": 0.05,
+        "n_phi": 1440,
+        "angle_resolution_deg": 0.25,
+        "seed": 777,
+        "elapsed_s": 2.735,
+        "is_whole_domain_proof": false
+      },
+      "all_checks_ok": true,
+      "elapsed_s": 4.31
+    }
+  },
+  "elapsed_s": 8.476,
+  "all_layouts_ok": true
+}

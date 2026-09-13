@@ -1,38 +1,33 @@
-\section{核心代码与支撑材料说明}
-\subsection{代码文件目录}
-本附录仅陈列前三问相关的核心算法文件。论文目录下的 \texttt{code/} 保存了编写时的源码快照，路径与哈希见 \texttt{code/MANIFEST.md}；完整运行仍需仓库框架与依赖。表中的“已有”表示仓库已有实现，不表示已经实现本文全部改进。
-\begin{longtable}{>{\raggedright\arraybackslash\scriptsize}p{5.1cm}p{8.9cm}}
-\toprule
-文件（省略公共前缀）&作用及与论文关系\\\midrule\endhead
-\texttt{geometry.py}&半平面裁剪、圆盘外包络、顶点直径、最小包围圆；通用覆盖公式与退化处理需要按本文校正。\\
-\texttt{cpp/geom.hpp}\newline\texttt{bindings.cpp}&C++几何内核及Python接口，用于直径、最小包围圆与求积加速。\\
-\texttt{q2\_second\_point\_quadrature.py}&第二检测点参考先验的数值求积；需补齐近距分支、一般第一点及任意候选的第二接收圆约束。\\
-\texttt{q2\_zones.py}&第二检测点区域构造与接收概率计算，使用时区分外包络近似和严格区域。\\
-\texttt{strategy.py}&q3 对照基线：固定布局扫描及逐源补测。\\
-\texttt{knowledge.py}&本文核心数据结构：频道—路径稀疏矩阵、列元数据、单元格证据、统计缓存与导出。\\
-\texttt{coverage.py}&从矩阵生成 Belief，维护安全半径界、整格位掩码、缺口报告与集合覆盖选点。\\
-\texttt{strategy\_matrix.py}&第三问主策略：矩阵写入、选择性检测、成批精化、自适应逼近与缺口补测；第四问代码不作为本文该问解法。\\
-\texttt{verify\_formulas.py}&本次新增的离线公式复核程序；检验覆盖极值、候选点裕量、后验均值和兜底单元尺度。\\
-\bottomrule
+\section{最终代码与支撑材料}
+\subsection{实现入口和可复现性}
+最终问题三、四入口分别为 \texttt{q3-v18}、\texttt{q4-v18}，均由 \texttt{versioned.py} 工厂构造，避免直接实例化父类时漏掉最终参数。支撑材料包含当前工作区的Python核心源码快照，原相对路径和SHA-256见 \texttt{code/MANIFEST.md}；完整程序运行仍以仓库框架和依赖为准。
+\begin{longtable}{>{\raggedright\arraybackslash\small}p{4.7cm}p{9.1cm}}\toprule
+主要文件&用途\\\midrule\endhead
+\texttt{geometry.py}&楔形裁剪、圆盘外包络、区域直径及最小包围圆。\\
+\texttt{knowledge.py}&频道—路径稀疏矩阵、真实坐标和反馈摘要。\\
+\texttt{knowledge\_layer.py}&失败清除排除圆、相交方格、覆盖计划及代价比较。\\
+\texttt{strategy\_v15.py}&问题三的负观测估计修正、2-opt与or-opt调度。\\
+\texttt{strategy\_v17.py}&问题四24点布局，继承v14射线搜索和在线调度。\\
+\texttt{strategy\_v18.py}&两问最终策略，共用知识矩阵和覆盖清除混入模块。\\
+\texttt{versioned.py}&交付入口与参数：问题三6/1130/3、or-opt四轮。\\
+{\scriptsize\texttt{q3\_or\_opt\_ablation.py}}&固定计时和种子，分离布局、路由和覆盖清除的收益。\\
+{\tiny\texttt{verify\_layout\_certificate.py}}&连续单元覆盖证书和有限采样交叉检验。\\
+\texttt{make\_assets.py}&按实际数据生成论文SVG/PDF图和实验表。\\\bottomrule
 \end{longtable}
-现有源码中的注释不能代替证明，例如“凸区域半径等于直径一半”“确定性求积即精确积分”“最近邻加2-opt所得路径为下界”等表述均不采用。
 
-\subsection{知识矩阵核心字段}
-以下直接摘录所设计数据结构对应的 \texttt{knowledge.py} 字段。\texttt{cells} 按频道和路径格组织稀疏证据，\texttt{columns} 单独维护访问位置，\texttt{point} 保存真实检测坐标，\texttt{\_stats} 为查询缓存。方法与依赖省略，完整文件见源码快照。当前字段保存格内最新摘要，论文提出的真实位置子表与追加事件索引为后续改进。
-\lstinputlisting[language=Python]{code/excerpt_knowledge.py}
+\subsection{离线复现实验命令}
+在项目根目录执行下列命令；这些命令只访问本地模拟器和文件。
+\begin{Verbatim}[fontsize=\scriptsize,frame=single]
+python3 script/run.py --strategy q3-v18 --seed 1
+python3 script/run.py --strategy q4-v18 --directional --seed 1
+python3 script/q3_or_opt_ablation.py --json paper/build/q3-final-ablation.json
+python3 script/verify_layout_certificate.py --layout v17
+python3 paper/make_assets.py
+python3 paper/verify_formulas.py
+bash paper/build.sh
+\end{Verbatim}
+第三问新复跑结果保存在 \texttt{paper/data/q3-final-ablation.json}；第四问已有逐例记录位于 \texttt{logs/audit/}，论文保留其汇总与源文件哈希。演练汇总保存在 \texttt{paper/data/official-drill-q18.json}，不能代替要求提交的正式原名日志。
 
-\subsection{覆盖状态及位运算核心代码}
-\texttt{region\_mask} 表示候选格，\texttt{covered\_mask} 表示已确认格，差集与计数直接用于缺口决策。这里的 \texttt{complete} 仅对应发现层，任务完成还需检查各已发现频道均已清除。
-\lstinputlisting[language=Python]{code/excerpt_masks.py}
-
-\subsection{半平面裁剪与直径计算核心摘录}
-下列内容从 \texttt{geometry.py} 提取，省去注释与类型声明以缩短篇幅；完整文件见支撑材料。示向角在现有接口中为度，进入三角函数前统一转弧度。
-\lstinputlisting[language=Python]{code/excerpt_geometry.py}
-
-\subsection{最小包围圆核心摘录}
-下列为已有随机增量主循环，依赖完整文件中的两点圆、三点圆和包含判定函数。最终应补上近共线处理与全顶点半径复核，本文认证条件不依赖未经复核的浮点半径。
-\lstinputlisting[language=Python]{code/excerpt_circle.py}
-
-\subsection{有限兜底网格的参考实现}
-此函数只生成清除候选点，不向模拟器发送动作。它是本文新增的数学方案原型，尚未接入策略或做官方测试。执行时按返回顺序尝试同一频道，成功后立即停止。
-\lstinputlisting[language=Python]{code/fallback_grid.py}
+\subsection{覆盖式清除核心代码摘录}
+以下三个函数省略注释与文档字符串，执行语句直接取自当前 \path{knowledge_layer.py}，辅助几何、类型定义和常量见完整快照。相交格不等于仅格心落入区域，整格剔除也不能简化为格心在失败圆内。覆盖保证还要求保守域包含真值、无不可达格和计划实际执行完成。
+\lstinputlisting[language=Python]{code/excerpt_cover_clear.py}

@@ -1,27 +1,25 @@
-# 中文建模论文初稿：matrix 主方案
+# 最终论文与支撑材料
 
-- `paper.pdf`：已编译论文，第四问模型与解法实际留白，插图为方框文字描述。
-- `main.tex`：主文件，`sections/` 分章，便于继续修改。
-- `code/`：附录摘录、有限兜底网格原型与已有核心代码快照。
-- `verify_formulas.py`：离线数学复核，不连接任何模拟器。
-- `build/formula-checks.json`：关键公式复核数值。
-- `MODEL_NOTES.md`：论文与现有实现的差异、后续需要补齐的工作。
+- `paper.pdf`：按最终 q3-v18 / q4-v18 补全的论文。
+- `main.tex`、`sections/`：可编辑正文，已补齐四问、证明、消融、演练和代码附录。
+- `figures/`：6张可编辑SVG及对应嵌入PDF；数学图为几何示意，实验图由记录生成。
+- `data/`、`tables/`：本文使用的实验数据、源文件哈希与自动生成表。
+- `code/snapshot/`、`code/MANIFEST.md`：最终工作区源码快照与校验清单。
+- `FINAL_CHECKLIST.md`：提交前仍需人工填入的正式测试信息及截图。
+- `MODEL_NOTES.md`：论文与最终实现的保证边界。
 
-使用本机已有 TeX Live 2026/Debian 的 LuaLaTeX 编译。未安装 ctex/xeCJK，因此使用 `article + babel(chinese) + fontspec`，字体为本机 Noto Serif CJK SC / Noto Sans CJK SC。无需新安装 TeX 包。
-
-在仓库根目录运行：
+从项目根目录编译：
 
 ```bash
-bash paper/build.sh
+python3 paper/make_assets.py
 python3 paper/verify_formulas.py
+bash paper/build.sh
 ```
 
-编译脚本自动切换至论文目录、编译三次并生成 `paper/paper.pdf`。TeX 字体缓存默认写到 `/tmp/mathmodel-tex-cache`，可以用环境变量 `TEXMFVAR` 指定其他可写目录。编译日志和中间文件在 `build/`。
+`make_assets.py`首次优先读取`build/q3-final-ablation.json`，该文件来自本轮最终参数重跑；数据副本保存在`data/`。重新跑消融：
 
-第三问以你设计的“频道 × 路径位置”知识矩阵为主线，详细介绍数据结构、派生知识、位掩码覆盖、成批补测与自适应决策；q3 仅作为基线对照。
+```bash
+python3 script/q3_or_opt_ablation.py --json paper/build/q3-final-ablation.json
+```
 
-内容以知识和推导为主，采用常见中文建模论文的摘要、问题分析、假设、符号、分问建模、结果、评价、参考文献、推导及代码附录结构。没有替代你们做最终格式审定；封面/承诺页、作者信息与比赛最终格式由你们按要求处理。
-
-已引用资料均为仓库中给出的题面及附件，数学结论在附录自证。未把仓库其他说明中的未经核实理论陈述和概率数值当作定论。没有登录、调用演练接口或占用正式测试机会，没有修改现有算法源码。
-
-真实线上改进作为主要评价方向，线上数值与案例编码待填；已有30例模拟取自 `_bench_v2_q3.txt`，移到附录作独立补充。正式表格待填。代码快照保留原实现和注释，其中存在的数学问题请以 `MODEL_NOTES.md` 和论文推导为准。
+使用LuaLaTeX、babel和本机Noto CJK字体。图表生成依赖numpy、matplotlib及已有框架依赖。正式测试须使用官方结果填表，演练数据不代填；本轮未调用官方接口或消耗正式测试机会。

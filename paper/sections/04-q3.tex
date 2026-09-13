@@ -1,232 +1,89 @@
-\section{问题三：知识矩阵驱动的自适应搜索与清除}
-\subsection{从基线方法到矩阵决策}
-本文以知识矩阵驱动的 matrix 方法为第三问主方案，以原 q3 方法作为基线。两者共用有界误差交会几何和20米清除条件，主要区别在于如何组织观测、如何决定下一步动作。q3 按预定七点布局扫描，按频道保存有效示向读数，再逐目标补测；matrix 将所有频道在所有检测位置上的不同反馈组织为统一知识矩阵，由当前知识决定检测频道、成批补测点和收尾缺口。
+\section{问题三：知识矩阵驱动的联合搜索与清除}
+\subsection{状态表达与时间目标}
+以频道为行、访问位置为列构造稀疏知识矩阵 $\mathsf M_t$。单元格状态包括未检测、无信号、示向、近距、清除失败和清除成功，附带真实坐标、角度与时间。沿行汇集同一目标的证据，沿列组织一次停点上的多频道检测。最终程序通过 \texttt{ChannelKnowledge} 将矩阵接入迭代调度，问题三入口为 \texttt{q3-v18}；独立的 \texttt{matrix} 策略作为对照路线。
 
-这个改进的重点在于\textbf{将“已有信息”变成每次决策都能查询的结构}。无信号读数可排除候选区域，已经测过的位置可用于抑制重复，多个频道可共享一次移动，已确认区域无须从头扫描。真实线上比较作为评价 matrix 的主要实验；历史本地模拟用于补充检查实现的一致性。
+路径列以120米量化建立索引，几何仍使用真实坐标。120米格既不是测向误差相同的区域，也不是光学定位精度；同格内两处测量不能视为重复读数。单元格保存摘要，连续测向历史由频道状态保存，动作日志用于完整复盘。失败清除摘要可能被同格后续反馈覆盖，这会减少可用负证据，不应将摘要表解释为全部历史。
 
-\begin{table}[htbp]\centering\small
-\caption{q3 基线与 matrix 主方案的决策比较}
-\begin{tabular}{p{2.4cm}p{5.2cm}p{6.1cm}}\toprule
-比较维度&q3 基线&matrix 主方案\\\midrule
-知识组织&每频道的示向读数列表&频道与路径点的稀疏矩阵，统一记录正负反馈及清除状态\\
-搜索进度&预定扫描点是否走完&每频道候选区域及未确认覆盖缺口\\
-频道选择&固定顺序扫描，跳过已定位或已清除频道&查询矩阵、几何和覆盖状态，选择本点仍需检测的频道\\
-补测行程&逐个源生成局部候选点&先成批精化，再按区域尺度分段逼近\\
-失败处理&局部重试及重扫&失败入账、横向换点、按缺口补测\\
-结果解释&动作与示向日志&矩阵、半径界、覆盖报告及各阶段动作原因\\\bottomrule
-\end{tabular}\end{table}
-
-\subsection{所设计的频道—路径知识矩阵}
-\subsubsection{行、列和单元格的定义}
-针对“一频道至多一个源”的题设，设计随行动扩展的知识矩阵
+记 $L$ 为路程、$N_s$ 为实际切频次数、$N_m$ 为检测次数、$N_o$ 为光学尝试次数、$N_c$ 为成功清除数，则
 \begin{equation}
-\mathsf M_t=(E_{j,k})_{20\times m_t},\qquad j=1,\ldots,20,
-\label{eq:matrix}
+T=L/5+N_s+5N_m+3N_o+2N_c.\label{eq:time}
 \end{equation}
-其中行 $j$ 表示频道，列 $k$ 表示已登记的路径位置，$m_t$ 随访问增长。单元格不是一个数，而是该频道在该位置的结构化证据：
+清除失败只消耗3秒，成功共5秒，清除操作不切换测向频道。模型先要求全部清除，再优化 $T$；虚拟时间与真实程序运行时间分开统计。
+
+\subsection{正负证据与保守可行域}
+设 $\mathcal P_j,\mathcal N_j,\mathcal A_j,\mathcal F_j$ 分别为频道 $j$ 的示向、无信号、近距和清除失败记录。全向场景的精确位置约束可写为
 \begin{equation}
-E_{j,k}=(\sigma_{j,k},p_{j,k},\theta_{j,k},n_{j,k},t_{j,k},f_{j,k}).
-\label{eq:evidence}
+K_j=\Omega\cap\bigcap_{i\in\mathcal P_j}(W_i\cap\disk(S_i,b))
+\cap\bigcap_{i\in\mathcal A_j}\disk(S_i,5)
+\setminus\left(\bigcup_{i\in\mathcal N_j}\disk(S_i,a)
+\cup\bigcup_{q\in\mathcal F_j}\disk(q,20)\right).
 \end{equation}
-这里 $\sigma$ 为反馈状态，$p$ 为真实动作坐标，$\theta$ 为可选示向度，$n$ 为检测计数，$t$ 为最后更新时间，$f$ 为清除失败次数。无观测的单元格默认为“未测”，不需要预先分配全部元素。
+示向反馈还排除其检测点5米近距圆。减去圆盘通常得到非凸集合，最终实现将两种用途分开：用正观测构造含真值的凸多边形外包络 $\widehat K_j$，用于包围圆及覆盖清除认证；用全向无信号排除圆筛选区域样本，修正估计点，用于调度和试清。样本质心是启发式锚点，不能替代认证区域。
 
-\begin{table}[htbp]\centering\small
-\caption{知识矩阵示意：行用于目标推断，列用于停点决策}
-\begin{tabular}{llll}\toprule
-频道/路径&$p_1$&$p_2$&$p_3$\\\midrule
-1&发现，$\theta\in[2^\circ,4^\circ]$&未发现&未测\\
-2&未发现&发现，$\theta\in[89^\circ,91^\circ]$&未测\\
-3&未测&清除失败&近距\\
-4&未发现&未发现&未发现\\
-$\vdots$&$\vdots$&$\vdots$&$\vdots$\\\bottomrule
-\end{tabular}\end{table}
-同一行收集的是同一目标的证据链，可用于推断位置与接收半径；同一列描述一个停点上多个频道的检测情况，可用于安排批量测量。行列两种查询将单目标定位与多目标路径规划连接起来。矩阵中的“未测”表示未知，“未发现”表示一次具有位置条件的负观测，二者必须区分。
+清除失败的20米排除圆通过矩阵传给覆盖计划，在整个方格都已确认无源时删去该格。全向无信号排除1000米、清除失败排除20米，两者作用范围和物理依据不同。只有 $\operatorname{dist}(S,\widehat K_j)>1500$ 才能安全跳过必然无信号的检测。
 
-\subsubsection{六类状态及物理语义}
-\begin{table}[htbp]\centering\small
-\caption{矩阵单元格的六类状态}
-\begin{tabular}{p{2.5cm}>{\raggedright\arraybackslash\small}p{3.3cm}p{7.4cm}}\toprule
-状态&实现名&对模型的含义\\\midrule
-未测&\texttt{not\_measure}&此位置没有该频道的观测，不能作任何排除。\\
-发现&\texttt{find}&获得示向度，对应角宽 $2\eps$ 的楔形及接收距离约束。\\
-未发现&\texttt{not\_find}&全向模型中 $\norm{G-p}>\rho$，可参与区域排除与半径上界估计。\\
-近距&\texttt{near}&$\norm{G-p}\le5$，可立即尝试光学清除。\\
-已清除&\texttt{cleared}&成功反馈确认该频道完成，整行退出后续检测调度。\\
-清除失败&\texttt{clear\_failed}&$\norm{G-p}>20$，排除光学圆盘并避免同点反复尝试；不等价于无信号。\\\bottomrule
-\end{tabular}\end{table}
-原始表中的 \texttt{not clear} 在当前程序中映射为清除失败；数学叙述中将“尚未执行清除”和“执行后失败”分开，前者只是任务状态，后者才构成距离证据。非示向单元格不需要赋予虚假的角度区间；跨零的示向区间用中心角与 $\eps$ 或圆周区间表示，不能按普通实数区间比较上下端点。
-
-\subsubsection{稀疏索引与精确坐标分工}
-实现采用两层字典，按频道和路径格查询证据：\texttt{cells[channel][cell\_key]}。
-
-路径列信息存于 \texttt{columns[cell\_key]}，包括格坐标、格心、首次访问时间和访问次数。另设按频道统计缓存记录检测、正负反馈及清除次数。
-
-当前路径索引量化尺度为 $\Delta_p=120\,\mathrm m$，覆盖计算另用 $\Delta_g=60\,\mathrm m$ 栅格。二者目的不同：前者压缩查询索引，后者进行区域集合运算，\textbf{均不替代动作的真实坐标}。式\eqref{eq:wedge}的顶点始终使用 $p_{j,k}$，不能用格心替代，否则几十米的坐标偏差可能超过仪器的角误差。
-
-同地点重复检测读数不变，仅对相同真实坐标成立。同一120米格内的两个位置可能具有不同误差和交会方向，因此“同格已测”只能作为调度启发，不能证明新点没有信息。当前单元格保存最近一条摘要，完整动作保留在事件日志中；数学上的证据历史应只追加、不覆盖。最终实现可采用“格键指向真实位置子表或事件编号列表”，兼顾快速索引与证据保留。
-
-设实际存储的证据数为 $N_e$、路径列数为 $m$，稀疏索引存储量为 $O(N_e+m+20)$，单格查询和更新平均为 $O(1)$。逐行重建可行域仍需要遍历该行证据，不能把哈希查询复杂度误称为整个定位算法复杂度。
-
-\placeholder{知识矩阵与三层状态结构}{上层绘制20行、动态路径列的稀疏矩阵，放大一个单元格展示状态、真实坐标、示向度、计数、时间和失败次数；中层为逐频道 Belief：可行域、接收半径界、来源及任务状态；下层为 CoverageTracker：候选位掩码、已确认位掩码、缺口报告。箭头标明检测反馈写入矩阵、按行更新几何、按列选择频道、覆盖缺口驱动新停点。明确120米索引与60米覆盖格是不同层次。}
-
-\subsection{由矩阵证据生成逐频道知识状态}
-\subsubsection{位置集合与接收半径的联合推断}
-每个频道的派生状态记为
+\subsection{发现层：圆心加六边形覆盖}
+最终布局由圆心和半径1130米的正六边形顶点组成。对一般环半径 $r_h$、边数 $n$，目标圆最远点到最近扫描点的距离为
 \begin{equation}
-\mathsf B_j=(\widehat K_j,L_j,U_j,r_j^{\rm plan},n_j^+,n_j^-,z_j),
+c_n(r_h)=\max\left\{\frac{r_h}{2\cos(\pi/n)},
+\sqrt{R_0^2+r_h^2-2R_0r_h\cos(\pi/n)}\right\}.\label{eq:q3cover}
 \end{equation}
-对应程序的 \texttt{Belief}。$\widehat K_j$ 为保守位置集合，$[L_j,U_j]$ 为接收半径界，$r_j^{\rm plan}$ 为覆盖规划半径，$n_j^+,n_j^-$ 为证据计数，$z_j$ 为任务完成状态。同步过程为
+证明见附录。代入 $n=6,r_h=1130$ 得覆盖半径约996.95米，小于接收半径下界1000米。因此完整执行各扫描点对未发现频道的检测，必能发现所有全向源。扫描点的访问顺序可改变，发现保证仅依赖点集与实际检测频道。
+
+同一频道取得3条示向后，可停止后续扫描点的重复测向，转入清除任务；这一阈值只用于已发现目标，不能用于宣布未知频道不存在。检测时跳过已清除频道，近距反馈立即清除。
+\begin{figure}[htbp]\centering\includegraphics[width=.93\linewidth]{figures/layouts.pdf}
+\caption{最终发现层布局：左为问题三七点布局，右为问题四24点布局及离线参考访问顺序。圆外扫描点符合题设移动范围。}\label{fig:layouts}\end{figure}
+
+\subsection{扫描与清除任务联合调度}
+固定“先扫描、再逐源清除”会重复经过相邻区域。为此构造动态任务集
 \begin{equation}
-\mathsf M_t\longrightarrow\{\mathsf B_j(t)\}
-\longrightarrow\text{覆盖报告}\longrightarrow\text{动作选择}.
+\mathcal T_t=\{(\mathrm{scan},i,q_i):i\text{尚未访问}\}
+\cup\{(\mathrm{clear},j,\widehat G_j):j\text{已发现且未清除}\}.
 \end{equation}
-收到新反馈后重新查询派生状态，因此一个负观测或清除成功可以改变之后多个停点的检测任务。
+只需一条有效读数即可生成目标锚点并登记清除任务。该任务会进一步测量或试清，并不意味着一条读数已经完成定位。
 
-记示向、无信号、近距与清除失败的真实位置集合分别为 $\mathcal P_j,\mathcal N_j,\mathcal A_j,\mathcal H_j$。全向源的联合可行集为
+以当前位置为起点，用最近邻构造开放路线，再用2-opt反转片段消除绕行，最后用or-opt将连续1至3个任务搬移至其他位置，接受整条路线长度严格下降的候选，最多执行4轮or-opt。形式上求可行近似解
 \begin{equation}
-\mathcal F_j=\left\{(G,\rho):
-\begin{array}{l}
-G\in\Omega,\ a\le\rho\le b,\\
-G\in W_i,\ 5<\norm{G-S_i}\le\rho\ (i\in\mathcal P_j),\\
-\norm{G-S_k}>\rho\ (k\in\mathcal N_j),\\
-\norm{G-S_k}\le5\ (k\in\mathcal A_j),\\
-\norm{G-S_k}>20\ (k\in\mathcal H_j)
-\end{array}\right\}.
-\label{eq:joint}
+\min_\pi\left\{\norm{z_0-z_{\pi(1)}}+
+\sum_{k=1}^{m-1}\norm{z_{\pi(k+1)}-z_{\pi(k)}}\right\},
 \end{equation}
-模型将物理语义分开，清除失败不能加入无线电负观测集合。投影 $K_j=\{G:\exists\rho,(G,\rho)\in\mathcal F_j\}$ 是完整位置知识；在线可用正观测的凸外包络处理高精度交会，用覆盖位掩码处理非凸排除。
+其中 $z_0$ 为当前位置。只执行路线首个任务，获得新反馈后重建任务集。这是滚动优化，所得路线是可行上界而非全局最优解；锚点变化使任务实际成本与静态路长不同。
 
-\subsubsection{正负证据给出的安全半径界}
-对于包含真实位置的集合 $\widehat K_j$，取
-\begin{align}
-L_j&=\max\left(a,\max_{p\in\mathcal P_j}\min_{X\in\widehat K_j}\norm{p-X}\right),\\
-U_j&=\min\left(b,\min_{q\in\mathcal N_j}\max_{X\in\widehat K_j}\norm{q-X}\right).
-\label{eq:radiusbounds}
-\end{align}
-正观测使半径至少达到其到真值的距离，故提供下界；无信号使半径小于其到真值的距离，故提供上界。若没有相应证据，回退到先验端点。式中上界取闭包便于数值维护，原始负观测仍是严格不等式。
+\subsection{直接试清、补测与覆盖式清除}
+到达估计点后先尝试光学清除。$r_*(\widehat K_j)>20$ 只表示不能保证该点覆盖全部可能位置，并不表示该点距真源必超过20米。因此以3秒失败代价换取直接命中的机会有实际价值。清除失败后先检查小规模覆盖计划，若不划算，再按问题二的交会原则补测；近共线情况下采用侧向候选。基类补测仍失败时启动覆盖兜底。
 
-规划使用 $r_j^{\rm plan}=L_j-\delta_R$，默认安全余量 $\delta_R=50\,\mathrm m$。不能用 $U_j$ 作保证接收半径。也不能从 $d(S,\widehat K_j)>r_j^{\rm plan}$ 推出一定无信号；排除“任何位置均能接收”的正确充分条件是
+将平面划分为边长 $s=25$ 米的方格，格心记为 $z_C$，选择
 \begin{equation}
-d(S,\widehat K_j)>U_j.
-\label{eq:impossibleprobe}
+\mathcal H_j=\{C:C\cap\widehat K_j\ne\varnothing\}.
+\label{eq:coverclear}
 \end{equation}
-相反，若 $\max_{X\in\widehat K_j}\norm{S-X}\le L_j$，则保证接收。两者之间的点仍可能有信息，应按预计收益取舍。当前代码采用计划半径作部分频道筛选，本文将其视为效率启发，并以独立覆盖证书检查是否仍有任务遗漏。
+程序将格网原点对齐至可行域包围盒下界，通过顶点包含与边相交判定选出相交格，减少窄区域的冗余候选。若一个格的四个顶点均位于同一个失败清除圆内，则剔除该格。对其余格心依次试清，命中即停止。
+\begin{proposition}
+若 $G_j\in\widehat K_j$、清除反馈准确、所选格心均可达且计划完整执行，则覆盖式清除必能清除该目标。
+\end{proposition}
+\begin{proof}
+真源所属方格 $C_G$ 满足 $\norm{z_{C_G}-G_j}\le25/\sqrt2\approx17.678<20$，因而必被选入。由范数凸性，四角均在失败排除圆内意味着整格在圆内，所以含真值的格不会被安全剔除。访问 $z_{C_G}$ 时必能清除目标。
+\end{proof}
 
-\subsection{位掩码覆盖：把搜索进度写成可计算的集合}
-\subsubsection{候选、已确认与缺口三类集合}
-将目标圆的包围盒划为边长 $\Delta_g$ 的方格 $B_1,\ldots,B_M$。所有与连续候选区域相交的格都纳入候选集合，避免漏掉细长区域或仅经过格边的可行位置。定义
+若计划有 $k$ 个点、全部访问路程为 $L_H$，成功前的最坏耗时上界为
 \begin{equation}
-\mathcal R_j=\{\ell:B_\ell\cap K_j\ne\varnothing\},\quad
-\mathcal C_j=\bigcup_{q\in Q_j}\{\ell:B_\ell\subseteq\disk(q,r_j^{\rm plan})\},\quad
-\mathcal U_j=\mathcal R_j\setminus\mathcal C_j,
-\label{eq:masks}
+T_H\le L_H/5+3k+2.\label{eq:clearcost}
 \end{equation}
-其中 $Q_j$ 必须为\textbf{实际检测过频道 $j$} 的停点集合。机器狗仅路过、或在同点测了其他频道，都不能计入 $Q_j$。对每个覆盖格检查四角均在圆内，才认定整格被这个停点覆盖。
+与“补测再清除”的参考成本 $L_m/5+10+\sigma$ 比较，其中 $\sigma\in\{0,1\}$ 表示是否切频。当前代码采用 $\sigma=1$ 的固定参考，且 $L_m$ 只估计到补测点的移动，所以这是动作选择代理，不是任意反馈下的严格最优判据。固定动作项在 $k=1,2$ 时为5、8秒，均小于10至11秒；$k=3$ 时为11秒，需要结合切频和路程判断。问题三前置计划最多2点，后置最多64点；超过上限时不截取不完整计划冒充覆盖。
+\begin{figure}[htbp]\centering\includegraphics[width=.78\linewidth]{figures/cover_clear.pdf}
+\caption{25米方格覆盖式清除示意。蓝色为保守可行域，红色圆为已失败的20米清除范围，绿色圆显示一个格心的有效清除范围。图为几何示意，非真实案例轨迹。}\end{figure}
 
-用一个非负整数的第 $\ell$ 位表示第 $\ell$ 格是否在集合内。程序的核心操作为
-\begin{equation}
-U_j=R_j\mathbin{\&}\mathord{\sim}C_j,\qquad
-n_j^{\rm gap}=\operatorname{popcount}(U_j).
-\end{equation}
-这里 $R_j,C_j,U_j$ 为位编码，区别于连续距离半径。原理上每次位运算为 $O(\lceil M/w\rceil)$ 个机器字操作，$w$ 为字长；在本题几千格的规模下适合反复评价候选点。$n_j^{\rm gap}\Delta_g^2$ 是离散缺口面积代理量，不应称为精确连续面积。
-
-全向无信号格在其安全接收圆内可以直接排除；覆盖进度与位置排除可共用圆盘位掩码，但语义不同。已收到正反馈的频道即使覆盖完成，仍需完成定位清除；从未发现的频道若候选全域被其负观测覆盖，才能判定不存在。
-
-\subsubsection{频道选择与缺口补测}
-给定候选停点 $S$，首先排除已清除频道及满足式\eqref{eq:impossibleprobe}的无接收可能频道。对其余频道，查询真实位置历史、缺口位掩码和定位半径，区分“为了发现而测”与“为了精化而测”。发现覆盖已经完成，不意味着无需再定位。
-
-对缺口补测，令 $D_j(S)$ 为候选停点能整格覆盖的位掩码，收益为
-\begin{equation}
-g(S)=\Delta_g^2\sum_{j\in\mathcal J}\omega_j
-\operatorname{popcount}\bigl(U_j\mathbin{\&}D_j(S)\bigr).
-\label{eq:gain}
-\end{equation}
-同一位置如果服务两个频道，其收益按两项任务分别计数，这正是矩阵按列进行联合调度的意义。基础缺口规划可取 $\omega_j=1$。
-
-采用两阶段选择：先求 $g_{\max}$，保留 $g(S)\ge\eta_g g_{\max}$ 的候选，再选择距当前位置最近者，其中 $0<\eta_g\le1$ 为收益保留比例。这样减少一味追求“单位路程收益”造成的小步徘徊，也减少只追求最大面积造成的长距离横穿。有限候选必须经过整格覆盖检查；“三角格能覆盖连续点”本身不能代替更强的整格包含检查。
-
-\subsection{扫描、成批精化与自适应逼近}
-\subsubsection{矩阵扫描主布局与基线布局}
-当前 matrix 主布局为圆心加半径1010米的正八边形顶点，共9点。由附录的通用公式，
-\begin{equation}
-c_8(1010)=\max\left\{\frac{1010}{2\cos(\pi/8)},
-\sqrt{1800^2+1010^2-3636000\cos(\pi/8)}\right\}
-\approx949.14\,\mathrm m.
-\end{equation}
-圆心起步后沿环访问的开放路线长约6421.14米。matrix 并非将9个停点的20个频道全部机械执行，而是每次反馈后更新需要检测的频道，并在发现证书完成时结束发现阶段。该连续布局满足950米覆盖，60米整格证书仍应独立核验，必要时细分边界格或补点。
-
-作为对照，q3 的圆心加半径1200米六边形，共7点，覆盖半径约968.90米，开放路径7200米。若全扫20频道，其扫描时间为 $7200/5+140\times5+139=2279$ 秒。matrix 的额外停点增加潜在检测次数，因此其收益不能只归因于环半径缩短，关键是矩阵支持的频道筛选、共享补测与缺口停止。
-
-\subsubsection{一次移动服务多个待精化频道}
-在覆盖扫描后，筛出只有少量读数或包围半径超过250米的频道集合 $\mathcal J_{\rm ref}$。选择一个共同停点，先移动一次，再检测多个频道。若在该点检测 $k$ 个频道，代价为
-\begin{equation}
-t_{\rm batch}(S)=\norm{S-p}/v+5k+N_s^{\rm batch},
-\end{equation}
-移动成本由这 $k$ 个任务共享，而不是为每个目标分别安排一次远距补测。
-
-矩阵实现用“各频道角分离中最差者”评价候选，以兼顾成批目标。数学上可用名义目标 $\widehat G_j$ 定义
-\begin{align}
-a_j(S)&=\max_{i\in\mathcal P_j}
-\left|\det\left(e(\theta_i),\frac{\widehat G_j-S}{\norm{\widehat G_j-S}}\right)\right|,\\
-S^*&=\arg\max_S\left\{\min_{j\in\mathcal J_{\rm ref}}a_j(S)-\lambda\norm{S-p}/L_0\right\}.
-\label{eq:batchrefine}
-\end{align}
-候选接收性按式\eqref{eq:impossibleprobe}及问题二保证区域另行检查。$a_j$ 同时识别平行和反向共线，避免把180度方位差误当成良好交会。当前程序使用检测点方向的近似角差，式\eqref{eq:batchrefine}给出与位置几何一致的改进表达。
-
-\subsubsection{按区域尺度选择逼近动作}
-成批精化后，按当前位置到各目标估计位置的距离选择下一频道。设当前估计为 $\widehat G_j$、包围半径为 $r_{*,j}$。当区域较大时，使用剩余比例 $f_t$ 的分段逼近：
-\begin{equation}
-p_{t+1}=p_t+(1-f_t)(\widehat G_j-p_t),\qquad
-f_t\in\{0.6,0.35,0.2,0.1\}.
-\label{eq:matrixapproach}
-\end{equation}
-该动作同时完成接近目标与换点测向。估计不变时，剩余名义距离为原来的 $f_t$ 倍，但真实误差区间必须在新读数后重新计算，不能由这一比例推出两次测向必然成功。
-
-当 $r_{*,j}\le60$ 米且尚未满足清除条件时，优先前往当前位置在凸可行域上的最近点
-\begin{equation}
-p_{t+1}=\arg\min_{X\in\widehat K_j}\norm{X-p_t},
-\end{equation}
-补充近距信息；若当前位置已在区域内且不能产生新基线，则横向换点。最近点只是一种低移动代价的补测位置，其到真值的距离不一定小于 $r_{*,j}$。
-
-若读数近乎共线，转为围绕区域的横向补测。新反馈回到矩阵并更新所有派生状态；清除失败也入账，避免在相同位置反复尝试。最后只有 $\max_{V\in\operatorname{Vert}(\widehat K_j)}\norm{V-C_j}\le20-\tau$ 或近距反馈时，才能认证清除；尝试成功后整行退出待办集合。
-
-\subsection{时间目标、结束条件与完整算法}
-总目标是在全部清除的前提下减少
-\begin{equation}
-T=\frac Lv+N_s+5N_m+3N_o+2N_c.
-\label{eq:time}
-\end{equation}
-矩阵分别作用于 $L$（共享移动、缺口路线）、$N_m$（频道筛选）、$N_o$（失败记忆）及收尾成本。清除不切换测向频道；成功清除才另加2秒。代码的频道顺序仍可优化为先测当前频道，这只是进一步减少切频的工程改进。
-
-任务完成需同时满足：每个已发现频道都得到清除成功反馈，每个未发现频道都被负观测覆盖排除，即
-\begin{equation}
-\forall j,\quad \operatorname{cleared}(j)\ \lor\
-\left[\mathcal P_j=\mathcal A_j=\varnothing\ \land\
-\Omega\subseteq\bigcup_{q\in\mathcal N_j}\disk(q,a)\right].
-\label{eq:certificate}
-\end{equation}
-使用细化后的候选集合也可构造等价或更强的证书，但必须保留未知频道存在的可能性。\texttt{CoverageReport.complete} 只是发现层状态，不能代替上述全任务结束条件。
+\subsection{完整流程与保证边界}
 \begin{enumerate}
-\item 初始化20行稀疏知识矩阵、逐频道几何状态与覆盖位掩码，从原点频道1出发。
-\item 执行主布局扫描，每次仅检测当前仍有任务的频道；写入真实坐标和反馈，再更新可行域、半径界和缺口。
-\item 对宽区域目标集中选择补测停点，以一次移动获取多行新证据。
-\item 按当前位置选择待清除目标，采用分段逼近、最近点补测或横向补测；清除成功后标记整行完成。
-\item 对未确认缺口运行集合覆盖补测，并重新处理获得新证据的频道；覆盖已完成时跳过无意义的全量重扫。
-\item 核验式\eqref{eq:certificate}后结束，保存矩阵、覆盖报告和动作原因；预算退出单独报告。
+\item 从原点、频道1初始化20个频道状态、知识矩阵及七点扫描任务。
+\item 对待扫描点和已发现目标联合规划，每次执行首个任务，按实际反馈更新证据。
+\item 执行直接试清、小规模覆盖计划、必要补测和后置覆盖计划，收到成功反馈才移除目标。
+\item 扫描任务结束后处理仍未清除频道，核对未知频道的完整扫描记录。
 \end{enumerate}
-\placeholder{matrix 的闭环流程与 q3 对照}{左侧用短流程展示 q3 的固定扫描与逐源补测；右侧突出 matrix 的矩阵写入、逐行推断、逐列检测、成批精化、分段逼近和缺口反馈。用同一真实线上案例的阶段统计标注少走的路段与跳过的检测；未取得对应数据时只绘制结构，不虚构轨迹或节省数值。}
-
-\subsection{有限兜底与后续扩展}
-有限次数的启发式逼近不能单独保证所有误差环境下收敛。为完整性保留有限光学兜底：首次示向在局部坐标给出
+理论上的完成条件是已发现频道全部清除，且每个未发现频道满足
 \begin{equation}
-0\le x\le1500,\qquad |y|\le1500\sin\eps.
-\label{eq:rectangle}
+\Omega\subseteq\bigcup_{q\in\mathcal N_j}\disk(q,1000).\label{eq:certificate}
 \end{equation}
-将该矩形划为75列、3行，225格边长均不超过20米，格心到格内任一点小于20米。按蛇形访问格心尝试清除，至多225次必成功；可跳过不与当前可行集相交的格。此方案为待接入的可靠兜底，不作为 matrix 线上提升的解释。
+不能以“已清除10个”或“待办队列为空”代替该条件。
 
-矩阵的进一步价值是支持短视野决策：状态取当前位置、测向频道、矩阵及派生集合，在深度2至3的候选树上比较“当前动作加后续清除移动”的总代价。完整模型可写为
-\begin{equation}
-V(s)=\min_{a\in\mathcal A(s)}\{t(s,a)+\mathbb E[V(\Phi(s,a,Y))\mid s,a]\}.
-\label{eq:bellman}
-\end{equation}
-无可信概率模型时可用可行反馈的最坏代价。该扩展复用矩阵中的历史与缺口，无须改变数据结构的行列含义。
+上述发现覆盖和清除覆盖均为充分条件，但当前程序还含时间预算、调度重试次数、64格上限及退化区域分支。因此其完整性论证以这些条件未中断覆盖执行为前提，有限批实验的全清率不能提升为所有输入下的无条件保证。若仍有未清目标，需如实报告未完成。对单次示向的1500米长窄扇形，附录给出至多225格的理论兜底构造；该构造可说明有限光学覆盖的存在性，不冒充已接入的64格执行流程。

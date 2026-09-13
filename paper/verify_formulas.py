@@ -31,7 +31,7 @@ def brute_coverage(n, ring, radius=1800.0):
 
 def main():
     checks = []
-    for n, ring in [(6, 1200.), (8, 1010.), (6, 1800.), (3, 1000.)]:
+    for n, ring in [(6, 1130.), (6, 1200.), (8, 1010.), (6, 1800.), (3, 1000.)]:
         exact, sampled = coverage(n, ring), brute_coverage(n, ring)
         assert sampled <= exact + 1e-8
         assert exact-sampled < 2.0

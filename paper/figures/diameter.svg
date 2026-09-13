@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="492.996838pt" height="223.99125pt" viewBox="0 0 492.996838 223.99125" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-09-13T15:33:53.177268</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.7+dfsg1, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 223.99125 
+L 492.996838 223.99125 
+L 492.996838 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 52.194783 166.17212 
+L 147.808696 166.17212 
+L 164.681739 109.928641 
+L 69.067826 109.928641 
+z
+" clip-path="url(#p8e3e279878)" style="fill: #e2f0ee; stroke: #17806b; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 108.438261 200.932501 
+C 125.114794 200.932501 141.110545 194.306844 152.902635 182.514754 
+C 164.694724 170.722664 171.320381 154.726914 171.320381 138.05038 
+C 171.320381 121.373847 164.694724 105.378096 152.902635 93.586007 
+C 141.110545 81.793917 125.114794 75.16826 108.438261 75.16826 
+C 91.761728 75.16826 75.765977 81.793917 63.973887 93.586007 
+C 52.181797 105.378096 45.556141 121.373847 45.556141 138.05038 
+C 45.556141 154.726914 52.181797 170.722664 63.973887 182.514754 
+C 75.765977 194.306844 91.761728 200.932501 108.438261 200.932501 
+L 108.438261 200.932501 
+z
+" clip-path="url(#p8e3e279878)" style="fill: none; stroke: #23658c; stroke-linejoin: miter"/>
+   </g>
+   <g id="line2d_1">
+    <path d="M 52.194783 166.17212 
+L 164.681739 109.928641 
+" clip-path="url(#p8e3e279878)" style="fill: none; stroke-dasharray: 5.55,2.4; stroke-dashoffset: 0; stroke: #be5147; stroke-width: 1.5"/>
+   </g>
+   <g id="text_1">
+    <text style="font-size: 12px; font-family: 'Noto Sans CJK JP'; text-anchor: middle" x="108.438261" y="16.75125" transform="rotate(-0 108.438261 16.75125)">平行四边形：直径圆可以覆盖</text>
+   </g>
+  </g>
+  <g id="axes_2">
+   <g id="patch_4">
+    <path d="M 326.122055 138.05038 
+L 438.609012 138.05038 
+L 382.365534 40.633818 
+z
+" clip-path="url(#p9c3131a77a)" style="fill: #edf4f6; stroke: #23658c; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 382.365534 194.293859 
+C 397.281478 194.293859 411.588513 188.367691 422.135678 177.820525 
+C 432.682844 167.27336 438.609012 152.966325 438.609012 138.05038 
+C 438.609012 123.134436 432.682844 108.827401 422.135678 98.280236 
+C 411.588513 87.73307 397.281478 81.806902 382.365534 81.806902 
+C 367.449589 81.806902 353.142554 87.73307 342.595389 98.280236 
+C 332.048223 108.827401 326.122055 123.134436 326.122055 138.05038 
+C 326.122055 152.966325 332.048223 167.27336 342.595389 177.820525 
+C 353.142554 188.367691 367.449589 194.293859 382.365534 194.293859 
+L 382.365534 194.293859 
+z
+" clip-path="url(#p9c3131a77a)" style="fill: none; stroke-dasharray: 3.7,1.6; stroke-dashoffset: 0; stroke: #be5147; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 382.365534 170.522568 
+C 399.588983 170.522568 416.109323 163.679619 428.288141 151.500801 
+C 440.466959 139.321983 447.309908 122.801643 447.309908 105.578193 
+C 447.309908 88.354744 440.466959 71.834403 428.288141 59.655585 
+C 416.109323 47.476767 399.588983 40.633818 382.365534 40.633818 
+C 365.142084 40.633818 348.621744 47.476767 336.442926 59.655585 
+C 324.264108 71.834403 317.421159 88.354744 317.421159 105.578193 
+C 317.421159 122.801643 324.264108 139.321983 336.442926 151.500801 
+C 348.621744 163.679619 365.142084 170.522568 382.365534 170.522568 
+L 382.365534 170.522568 
+z
+" clip-path="url(#p9c3131a77a)" style="fill: none; stroke: #17806b; stroke-linejoin: miter"/>
+   </g>
+   <g id="PathCollection_1">
+    <defs>
+     <path id="m669de2a191" d="M 0 2.738613 
+C 0.726289 2.738613 1.422928 2.450055 1.936492 1.936492 
+C 2.450055 1.422928 2.738613 0.726289 2.738613 0 
+C 2.738613 -0.726289 2.450055 -1.422928 1.936492 -1.936492 
+C 1.422928 -2.450055 0.726289 -2.738613 0 -2.738613 
+C -0.726289 -2.738613 -1.422928 -2.450055 -1.936492 -1.936492 
+C -2.450055 -1.422928 -2.738613 -0.726289 -2.738613 0 
+C -2.738613 0.726289 -2.450055 1.422928 -1.936492 1.936492 
+C -1.422928 2.450055 -0.726289 2.738613 0 2.738613 
+z
+" style="stroke: #be5147"/>
+    </defs>
+    <g clip-path="url(#p9c3131a77a)">
+     <use xlink:href="#m669de2a191" x="382.365534" y="40.633818" style="fill: #be5147; stroke: #be5147"/>
+    </g>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 10px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #be5147" x="441.421186" y="163.359946" transform="rotate(-0 441.421186 163.359946)">直径圆</text>
+   </g>
+   <g id="text_3">
+    <text style="font-size: 10px; font-family: 'Noto Sans CJK JP'; text-anchor: start; fill: #17806b" x="435.796838" y="59.309511" transform="rotate(-0 435.796838 59.309511)">最小包围圆</text>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 12px; font-family: 'Noto Sans CJK JP'; text-anchor: middle" x="382.365534" y="16.75125" transform="rotate(-0 382.365534 16.75125)">等边三角形：直径圆不能覆盖</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p8e3e279878">
+   <rect x="7.2" y="22.75125" width="202.476522" height="194.04"/>
+  </clipPath>
+  <clipPath id="p9c3131a77a">
+   <rect x="281.127273" y="22.75125" width="202.476522" height="194.04"/>
+  </clipPath>
+ </defs>
+</svg>
