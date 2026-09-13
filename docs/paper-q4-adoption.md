@@ -159,7 +159,10 @@ python3 _bench_paper_q4.py --mode dir  --seeds 1-20 --n-directional 8   # 重度
   墙钟 3.6–6.2 s（20 分钟预算下毫无压力）。
 * 我们自己的 Q4 策略**从未上过官方 live**。现有 7 场 Q3 live 跑的是
   **优化前的旧参数**（`scan_radius=1200, approach_radii=[200,400,700]`，
-  即 `说明.md` §5.3 的"旧默认"行），因此 `matrix` 策略线上验证为零。
+  即 `说明.md` §5.3 的"旧默认"行），因此 **`matrix` 的 Q4 路径线上验证仍为零**。
+  （2026-09-13 补充：`matrix` 的**问题3** 路径已有 1 场线上实测——479.3 s/源、10/10 全清、
+  虚拟 4793 s，case `ZD4M-9UQ8-AKZS-JTG6`，见 `docs/robot-link-windows-vm.md` §3.8/§3.9；
+  本节关于 Q4 的判断不受影响。）
 
 ---
 

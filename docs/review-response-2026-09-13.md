@@ -251,6 +251,9 @@ covered = disk(plan_radius) ∩ heading_covered_cells
    真正要改的是"候选停点由区域形状驱动"。
 4. **官方 live 演练**：本轮所有结论都止于 mock。Q4 的 `matrix` 路线一次线上
    都没跑过，`paper-q4` 是唯一有 live 记录的臂。
+   > 2026-09-13 更新：`matrix` 的**问题3** 路径已补齐 1 场官方 live（479.3 s/源、10/10 全清，
+   > case `ZD4M-9UQ8-AKZS-JTG6`，见 `docs/robot-link-windows-vm.md` §3.8/§3.9）；
+   > 本条关于 **Q4** 的判断不变，`q3-v8`/`q3-v15` 的线上场次仍为零。
 
 ---
 
