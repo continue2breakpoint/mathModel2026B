@@ -272,8 +272,10 @@ Set-Date -Date ([TimeZoneInfo]::ConvertTimeFromUtc($ref, [TimeZoneInfo]::Local))
 也不再让 qemu 用户态网卡做端口映射（那会在宿主机上凭空多出一个 `0.0.0.0:2026` 监听，暴露面大）。
 qemu 用户态网卡从此只保留 SMB 文件共享。
 
-**实现**：`C:\protableTool\portrelay\portrelay.exe`——C# 写的极简 TCP 转发，`csc.exe` 编译，**6656 字节，零外部依赖**；
-调用形式 `portrelay.exe <监听地址> <监听端口> <目标地址> <目标端口>`，只绑指定地址（不绑 `0.0.0.0`），
+**实现**：`C:\protableTool\portrelay\portrelay.exe`——C# 写的极简 TCP 转发，`csc.exe` 编译，**7680 字节，零外部依赖**；
+调用形式 `portrelay.exe <监听地址> <监听端口> <目标1>[,<目标2>,…]`（目标写 `host:port`），只绑指定地址（不绑 `0.0.0.0`），
+每个连接依次尝试候选目标、用第一个连得上的（回环上被拒是瞬时的），并把当前生效目标写进日志——
+因为**模拟器的 robot 端口可以被改**（实测遇到过 2025 与 2026 两种），多目标回退能让宿主机侧地址保持不变；
 每个连接两条线程做双向 `CopyTo`；由 SYSTEM 计划任务 `PortRelay`（触发条件：开机）托管，日志写同目录 `portrelay.log`。
 
 **实测验证**（2026-09-13 11:33–11:36）：
@@ -301,6 +303,37 @@ python3 script/run.py --mode live --base-url http://192.168.122.161:2026
 
 （`preflight.py` 的探测主机名硬编码为 `127.0.0.1`，只传 `--robot-port` 改不了地址；要一起探测就直接
 `curl -s -X POST http://192.168.122.161:2026/enter ...`，见 §4.2。）
+
+### 3.8 首次线上实战：`matrix` 策略跑通（11:42，10/10 全清）
+
+链路改好后立刻跑了一次真实演练（问题3）：
+
+```bash
+cd mathModel2026B
+python3 script/run.py --mode live --base-url http://192.168.122.161:2026 \
+  --strategy matrix --seed 11 --tag online-matrix
+```
+
+| 项 | 值 |
+| --- | --- |
+| 运行目录 | `logs/runs/20260913T034232Z_s11_online-matrix_91a392/` |
+| status / wall | `ok` / **2.12 s** |
+| 官方 `result.json` | `jammer_count: 10`（全为全向源）、`case_code ZD4M-9UQ8-AKZS-JTG6`、窗口 `03:41:08Z–03:42:35Z` |
+| 本方统计 | `cleared_count 10`；`cleared_channels [1,7,10,11,12,13,15,16,18,19]`（正好 10 个）；`uncleared_channels` 里那 10 个是**本来就没有源**的频道 |
+| 虚拟时间 | 4793.45 s（479.3 s/源）；measure 167 次（accepted 37）、clear 12 次（成功 10 / 失败 2） |
+| 其它 | 位移 18712 m，切频道 160 次 |
+
+**结论：10/10 全清**，与官方 `jammer_count=10` 吻合。（对照：仓库 mock 30 seed 下 matrix 是 330.24 s/源，
+真实模拟器这一场 479.3 s/源，说明 live 案例的几何/物理与 mock 有差异，属预期。）
+
+三个操作细节：
+
+1. **模拟器的 robot 端口是 2025**（设置页被改过），不是默认 2026。宿主机侧统一用 `192.168.122.161:2026`，
+   由 `portrelay` 的多目标回退 `127.0.0.1:2025,127.0.0.1:2026` 承接，客户端地址不必变。
+2. 我们 `/exit` 之后约 1 s，模拟器写出 `practice-*.result.json`（明文 JSON）、`.psum`（给服务器的加密信封：
+   `JMBPSUM1` 头 + ticket + RSA-OAEP 包裹的 DEK + AES-GCM 分块体）、`.jlog`（加密压缩行为日志），测试窗口随之结束。
+3. 门控关闭后的指纹是 `curl` 退码 **52**、耗时 **1–7 ms**（模拟器在听但直接关连接）；
+   若退码是 **56**、耗时 **≈2.0 s**，说明 relay 的上游没人听（模拟器没起或端口又变了），见 §3.3/§3.7。
 
 ---
 
@@ -386,11 +419,11 @@ PY
 
 | 文件 / 对象 | 说明 |
 | --- | --- |
-| `C:\protableTool\portrelay\portrelay.exe` | 转发器本体，**6656 字节**，`csc.exe` 编译，零外部依赖 |
+| `C:\protableTool\portrelay\portrelay.exe` | 转发器本体，**7680 字节**，`csc.exe` 编译，零外部依赖 |
 | `C:\protableTool\portrelay\portrelay.cs` | 源码（工作区副本 `_probe2026/portrelay.cs`） |
 | `C:\protableTool\portrelay\portrelay.log` | 启动 / 绑定失败 / 上游连接失败日志 |
 | `C:\protableTool\portrelay\testsrv.exe` | 验证用临时上游（5120 字节，平时不运行，可删） |
-| 计划任务 `PortRelay` | 开机以 **SYSTEM** 启动 `portrelay.exe 192.168.122.161 2026 127.0.0.1 2026` |
+| 计划任务 `PortRelay` | 开机以 **SYSTEM** 启动 `portrelay.exe 192.168.122.161 2026 127.0.0.1:2025,127.0.0.1:2026`（多目标自动回退） |
 
 日常运维（可在 VM 里执行，也可经 §4.4 的 WinRM 远程执行）：
 
@@ -404,9 +437,9 @@ Get-Content 'C:\protableTool\portrelay\portrelay.log' -Tail 20
 # 重启
 Stop-ScheduledTask -TaskName PortRelay ; Start-ScheduledTask -TaskName PortRelay
 
-# 改目标（例如模拟器端口改成 2030）
+# 改目标（多目标回退；模拟器端口变了就把新的排在最前）
 $act = New-ScheduledTaskAction -Execute 'C:\protableTool\portrelay\portrelay.exe' `
-         -Argument '192.168.122.161 2026 127.0.0.1 2030'
+         -Argument '192.168.122.161 2026 127.0.0.1:2026,127.0.0.1:2025'
 Set-ScheduledTask -TaskName PortRelay -Action $act
 Stop-ScheduledTask -TaskName PortRelay ; Start-ScheduledTask -TaskName PortRelay
 
@@ -527,8 +560,10 @@ netsh advfirewall set allprofiles state on
 1. 确认 `portrelay` 在跑：`Get-ScheduledTask -TaskName PortRelay | ft TaskName,State`；
    `netstat -ano | findstr :2026` 应有一条 `192.168.122.161:2026`（portrelay，SYSTEM）
 2. 启动模拟器 GUI（`C:\zWindowsUtility\Jammers-simulator-full\jammers-simulator-full.exe`）
-3. `netstat -ano | findstr :2026` 现在应有 **3 条**：`127.0.0.1:2026`、`[::1]:2026`（模拟器）+ `192.168.122.161:2026`（portrelay）
-   —— 若只有 portrelay 那条，去 `JammersSimulatorData\startup.log` 看是不是又报 `port 2026 is unavailable`
+3. 看模拟器**实际监听的端口**（可能不是 2026，实测遇到过 **2025**）：
+   `Get-NetTCPConnection -OwningProcess (Get-Process jammers-simulator-full).Id -State Listen | ft LocalAddress,LocalPort`
+   —— 宿主机侧固定用 `192.168.122.161:2026`，靠 `portrelay` 的多目标回退承接，不必跟着改；
+   若只有 portrelay 那条而没有模拟器那条，去 `JammersSimulatorData\startup.log` 看是不是又报 `port … is unavailable`
 4. 在 GUI 里**开始演练/正式测试**（门控开启）
 5. **真实 HTTP 探测**：`curl -s --max-time 5 http://192.168.122.161:2026/` → 期望 `{"accepted":false,...}`
 6. 先在演练里跑 §3.4 的 30 秒烟测，再跑：

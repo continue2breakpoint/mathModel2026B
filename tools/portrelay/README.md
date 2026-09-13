@@ -24,18 +24,23 @@
 ## 运行
 
 ```
-portrelay.exe <监听地址> <监听端口> <目标地址> <目标端口>
-portrelay.exe 192.168.122.161 2026 127.0.0.1 2026
+portrelay.exe <监听地址> <监听端口> <目标1>[,<目标2>,...]      # 目标写法 host:port
+portrelay.exe 192.168.122.161 2026 127.0.0.1:2025,127.0.0.1:2026
 ```
 
 只绑定指定地址（**不绑 `0.0.0.0`**），因此不会与模拟器绑定的 `127.0.0.1` / `[::1]` 冲突。
-日志写同目录 `portrelay.log`。绑定失败会每 5 秒重试（应对开机时地址还没就绪）。
+
+**多目标回退**：模拟器的 robot 端口可以在设置页改动（实测遇到过 **2025** 与 2026 两种），
+所以按 `host:port` 给多个候选，每个连接依次尝试、用第一个连得上的（回环上被拒是瞬时的，开销可忽略），
+并把当前生效的目标写进日志。老写法 `... <目标地址> <目标端口>` 仍兼容。
+
+日志写同目录 `portrelay.log`。绑定失败每 5 秒重试（应对开机时地址还没就绪）。
 
 ## 用计划任务托管（开机自启）
 
 ```powershell
 $act   = New-ScheduledTaskAction -Execute 'C:\protableTool\portrelay\portrelay.exe' `
-           -Argument '192.168.122.161 2026 127.0.0.1 2026'
+           -Argument '192.168.122.161 2026 127.0.0.1:2025,127.0.0.1:2026'
 $trg   = New-ScheduledTaskTrigger -AtStartup
 $princ = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $set   = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
