@@ -37,8 +37,18 @@ from jammers_paths import PathResolutionError, resolve  # noqa: E402
 from mathmodel2026b.logging_utils import default_log_root  # noqa: E402
 from mathmodel2026b.runner import RunConfig, run_once  # noqa: E402
 from mathmodel2026b.strategy import Q3Params  # noqa: E402
+from mathmodel2026b.versioned import (  # noqa: E402
+    DECISION_METHODS,
+    available_methods,
+    build_method,
+)
 
-STRATEGY_CHOICES = ("q3", "matrix", "paper-q4")
+#: 非版本化路线（各自独立的技术路线，不算"历代版本"）。
+ROUTE_CHOICES = ("q3", "matrix", "paper-q4")
+#: 版本化决策方法（"最终成品 + 阶段性有益尝试"），见 ``mathmodel2026b.versioned``。
+#: 注意 ``q3`` 同时是 ROUTE_CHOICES 里的基线名，这里去重。
+VERSION_CHOICES = tuple(k for k in available_methods() if k not in ROUTE_CHOICES)
+STRATEGY_CHOICES = tuple(ROUTE_CHOICES) + VERSION_CHOICES
 
 #: 离线 mock 用的占位队号。**不要在这里写死真实队号**——平台公告明确要求
 #: 提交代码时隐去队号，改为命令行参数/配置文件提供。
@@ -70,12 +80,20 @@ def coerce(value: str):
 
 
 def apply_param_overrides(params: Any, overrides: list[str]) -> Any:
-    """把 ``--param KEY=VALUE`` 应用到任意 slotted dataclass 参数对象上。"""
-    valid = set(getattr(params, "__slots__", ()) or ())
-    if not valid:
-        from dataclasses import fields
+    """把 ``--param KEY=VALUE`` 应用到任意 dataclass 参数对象上。
 
+    注意：不能只看 ``params.__slots__``——``@dataclass(slots=True)`` 的子类
+    ``__slots__`` **只含自己声明的字段**，继承来的字段（例如
+    ``Q3V15Params.schedule_min_readings`` 来自 ``Q3V8Params``）会漏掉，
+    导致"明明合法的参数被判为未知"。``dataclasses.fields`` 会递归收集全部字段，
+    因此优先用它。
+    """
+    from dataclasses import fields, is_dataclass
+
+    if is_dataclass(params):
         valid = {field.name for field in fields(params)}
+    else:
+        valid = set(getattr(params, "__slots__", ()) or ())
     for item in overrides:
         if "=" not in item:
             raise SystemExit(f"--param 需要 KEY=VALUE 形式：{item!r}")
@@ -95,8 +113,11 @@ def apply_param_overrides(params: Any, overrides: list[str]) -> Any:
 
 
 def build_strategy_params(strategy: str, directional: bool, overrides: list[str]) -> Any:
-    """构造策略参数对象（``q3`` / ``matrix`` / ``paper-q4``）。
+    """构造策略参数对象。
 
+    ``matrix`` 用 :class:`MatrixParams`；版本化方法（``q3-v5`` …）用各自
+    ``*Params`` 并**先套上交付参数**（``versioned.DECISION_METHODS[..].overrides``），
+    再叠加 ``--param`` —— 这样命令行只写"要改的那一项"，不必抄一遍交付配置。
     ``paper-q4`` 的内核自带全部几何与调度参数，框架侧只用到
     :class:`Q3Params` 里的 ``max_wall_time_s``（适配器的墙钟安全阀）与
     ``max_virtual_time_s``，因此复用默认 :class:`Q3Params`。
@@ -105,13 +126,24 @@ def build_strategy_params(strategy: str, directional: bool, overrides: list[str]
         from mathmodel2026b.strategy_matrix import MatrixParams
 
         params: Any = MatrixParams(directional=directional)
+    elif strategy in DECISION_METHODS:
+        from mathmodel2026b.versioned import _resolve_ref  # noqa: PLC0415
+
+        spec = DECISION_METHODS[strategy]
+        params = _resolve_ref(spec.params_ref)(**spec.overrides)
     else:
         params = Q3Params()
     return apply_param_overrides(params, overrides)
 
 
 def make_strategy_factory(strategy: str, directional: bool):
-    """返回 ``RunConfig.strategy_factory`` 需要的可调用对象。"""
+    """返回 ``RunConfig.strategy_factory`` 需要的可调用对象。
+
+    runner 以 ``factory(params)`` 调用，其中 ``params`` 由
+    :func:`build_strategy_params` 构造（已含交付参数 + ``--param``）。
+    因此这里只需返回**策略类本身**；不要返回无参闭包，也不要在类里再改 params
+    （曾因此丢掉 runner 传进来的参数，并触发 slotted dataclass 的 super() 校验错误）。
+    """
     if strategy == "matrix":
         from mathmodel2026b.strategy_matrix import KnowledgeSearchStrategy, Q4Strategy
 
@@ -123,6 +155,10 @@ def make_strategy_factory(strategy: str, directional: bool):
         from mathmodel2026b.strategy_q4 import Q4Strategy as PaperQ4Strategy
 
         return PaperQ4Strategy
+    if strategy in DECISION_METHODS:
+        from mathmodel2026b.versioned import _resolve_ref  # noqa: PLC0415
+
+        return _resolve_ref(DECISION_METHODS[strategy].strategy_ref)
     from mathmodel2026b.strategy import Q3Strategy
 
     return Q3Strategy
@@ -136,9 +172,17 @@ def build_parser() -> argparse.ArgumentParser:
         choices=STRATEGY_CHOICES,
         default="q3",
         help=(
-            "q3=旧 Q3Strategy（兼容默认）；matrix=知识矩阵 KnowledgeSearchStrategy；"
-            "paper-q4=队友论文 Q4 内核（需配 --directional）"
+            "路线：q3=框架基线 Q3Strategy；matrix=知识矩阵；paper-q4=队友论文 Q4 内核"
+            "（需配 --directional）。"
+            "版本化方法（见 script/list_methods.py 或 --list-methods）："
+            "q3-v5/v6/v7/v8/v15=问题3 历代；q4-v8/v9/v14=问题4 历代。"
+            "推荐上线组合：--strategy q3-v15（问题3）/ --strategy q4-v14 --directional（问题4）"
         ),
+    )
+    parser.add_argument(
+        "--list-methods",
+        action="store_true",
+        help="打印全部可选决策方法（含新增机制与实测效果）后退出",
     )
     parser.add_argument("--robot-id", default=None, help="默认取 login-jammers 配置里的队号")
     parser.add_argument("--login-jammers", default=None, help="login-jammers 仓库根目录")
@@ -168,6 +212,11 @@ def resolve_robot_id(explicit: str | None, login_jammers: str | None) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.list_methods:
+        from mathmodel2026b.versioned import describe_methods
+
+        print(describe_methods(verbose=True))
+        return 0
     params = build_strategy_params(args.strategy, args.directional, args.param)
     strategy_factory = make_strategy_factory(args.strategy, args.directional)
     robot_id = resolve_robot_id(args.robot_id, args.login_jammers)

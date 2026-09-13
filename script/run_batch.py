@@ -55,7 +55,13 @@ from jammers_paths import PathResolutionError, resolve  # noqa: E402
 from mathmodel2026b.logging_utils import default_log_root  # noqa: E402
 from mathmodel2026b.runner import RunConfig, run_once  # noqa: E402
 from mathmodel2026b.strategy import Q3Params  # noqa: E402
-from run import PLACEHOLDER_TEAM_NO, apply_param_overrides, coerce  # noqa: E402
+from run import (  # noqa: E402
+    PLACEHOLDER_TEAM_NO,
+    apply_param_overrides,
+    build_strategy_params,
+    coerce,
+    make_strategy_factory,
+)
 
 
 @dataclass(slots=True)
@@ -70,16 +76,30 @@ class BatchSpec:
     repeat: int = 1
     jobs: int = 1
     notes: dict[str, Any] = field(default_factory=dict)
+    #: 要横评的策略（"决策方法"名，见 ``mathmodel2026b.versioned`` 与
+    #: ``script/list_methods.py``）。留空 = 只跑框架基线 ``q3``。
+    #: 每个名字会与 grid 做笛卡尔积，因此可以在**同一批 seed** 上比较
+    #: ``q3-v8`` 与 ``q3-v15`` 这类历代策略。
+    strategies: list[str] = field(default_factory=list)
 
     def combinations(self) -> list[dict[str, Any]]:
+        base: list[dict[str, Any]]
         if not self.grid:
-            return [dict(self.fixed)]
-        keys = sorted(self.grid)
+            base = [dict(self.fixed)]
+        else:
+            keys = sorted(self.grid)
+            base = []
+            for values in itertools.product(*(self.grid[k] for k in keys)):
+                combo = dict(self.fixed)
+                combo.update(dict(zip(keys, values)))
+                base.append(combo)
+        names = self.strategies or ["q3"]
         out: list[dict[str, Any]] = []
-        for values in itertools.product(*(self.grid[k] for k in keys)):
-            combo = dict(self.fixed)
-            combo.update(dict(zip(keys, values)))
-            out.append(combo)
+        for name in names:
+            for combo in base:
+                item = dict(combo)
+                item["__strategy__"] = name
+                out.append(item)
         return out
 
 
@@ -112,6 +132,11 @@ def load_spec(args: argparse.Namespace) -> BatchSpec:
         spec.repeat = int(raw.get("repeat", 1))
         spec.jobs = int(raw.get("jobs", 1))
         spec.notes = dict(raw.get("notes") or {})
+        strategies = raw.get("strategies")
+        if strategies:
+            spec.strategies = (
+                [strategies] if isinstance(strategies, str) else [str(s) for s in strategies]
+            )
 
     if args.tag:
         spec.tag = args.tag
@@ -137,6 +162,8 @@ def load_spec(args: argparse.Namespace) -> BatchSpec:
         spec.repeat = args.repeat
     if args.jobs is not None:
         spec.jobs = args.jobs
+    if getattr(args, "strategies", None):
+        spec.strategies = [s.strip() for s in args.strategies.split(",") if s.strip()]
     return spec
 
 
@@ -156,9 +183,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--login-jammers", default=None)
     parser.add_argument("--robot-id", default=None)
     parser.add_argument("--require-full-clear", action="store_true", help="有未清除的 run 就返回非零")
+    parser.add_argument(
+        "--strategies",
+        default=None,
+        help=(
+            "逗号分隔的决策方法名（见 script/list_methods.py），与参数网格做笛卡尔积。"
+            "用于在同一批 seed 上横评历代策略，例如 --strategies q3-v8,q3-v15"
+        ),
+    )
     parser.add_argument("--max-wall-s", type=float, default=None, help="单个 run 的 wall 时间上限")
     parser.add_argument("--quiet", action="store_true")
     return parser
+
+
+def _override_pairs(combo: dict[str, Any]) -> list[str]:
+    """把参数字典转成 ``KEY=VALUE`` 列表，跳过 ``__strategy__`` 这类内部键。"""
+    return [
+        f"{k}={_to_text(v)}" for k, v in combo.items() if not str(k).startswith("__")
+    ]
 
 
 def _run_one(
@@ -175,9 +217,20 @@ def _run_one(
     batch_id: str,
 ):
     params = Q3Params()
-    apply_param_overrides(params, [f"{k}={_to_text(v)}" for k, v in combo.items()])
+    apply_param_overrides(params, _override_pairs(combo))
     if max_wall_s is not None:
         params.max_wall_time_s = max_wall_s
+    strategy_name = combo.get("__strategy__", "q3")
+    strategy_factory = None
+    if strategy_name != "q3":
+        # 复用 run.py 的构造/工厂，保证"批次里的参数覆盖口径"与单跑完全一致
+        # （包括版本化方法的**交付参数**，例如 schedule_min_readings=1）。
+        params = build_strategy_params(
+            strategy_name, directional, _override_pairs(combo)
+        )
+        if max_wall_s is not None:
+            params.max_wall_time_s = max_wall_s
+        strategy_factory = make_strategy_factory(strategy_name, directional)
     config = RunConfig(
         robot_id=robot_id,
         seed=seed,
@@ -189,6 +242,7 @@ def _run_one(
         tag=tag,
         write_trace=False,
         notes={"batch_id": batch_id, "combo": combo, "seed": seed},
+        strategy_factory=strategy_factory,
     )
     return run_once(config)
 

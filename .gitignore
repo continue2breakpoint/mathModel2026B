@@ -1,5 +1,9 @@
 # 运行产物（每次 run 的日志/索引/批次摘要）
-/logs/
+# 注意用 /logs/* 而不是 /logs/ ：后者会把整个目录排除，导致下面的 ! 例外失效
+# （git 不会进入被排除的目录去找例外）。
+/logs/*
+# 例外：文档里引用的"版本横评"原始输出要留档（docs/q34-version-lineage.md 的数字来源）
+!/logs/versions_*.txt
 
 # 本地环境覆盖（可能含机器相关路径，不提交）
 /script/jammers.local.json

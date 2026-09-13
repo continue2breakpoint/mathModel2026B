@@ -1,0 +1,6 @@
+arm                        full   vt_med  avg_med  dist_med  meas_med
+v8 (min_readings=1)       30/30     3450   267.19     13136     119.0
+v15 or_opt=0 excl=on      30/30     3496   273.73     13288     122.0
+v15 or_opt=4 excl=on      30/30     3496   273.73     13288     122.0
+v15 or_opt=0 excl=off     30/30     3450   267.19     13136     119.0
+v15 or_opt=4 excl=off     30/30     3450   267.19     13136     119.0

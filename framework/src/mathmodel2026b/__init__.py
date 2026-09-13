@@ -7,6 +7,10 @@
 ``state``          机器狗 / 逐频道状态与计数
 ``client``         模拟器通信（HTTP / 记录装饰器 / 回放）
 ``strategy``       可插拔策略（问题3 实现见 :class:`Q3Strategy`）
+``strategy_v5``…``strategy_v15``
+                   问题3/4 的历代策略（版本谱系见 ``docs/q34-version-lineage.md``）
+``versioned``      **决策方法注册表**：把历代策略登记成可选决策方法
+                   （``script/list_methods.py`` 与 ``script/run.py --strategy`` 共用）
 ``runner``         一次完整运行的编排 + 结构化日志
 ``mock``           离线 mock 模拟器（无 Windows 客户端时验证工作流）
 ``logging_utils``  JSONL 日志格式与索引
@@ -44,6 +48,17 @@ from .protocol import (
 from .state import ALL_CHANNELS, ChannelState, ChannelStatus, DogState
 from .strategy import Q3BaselineStrategy, Q3Params, Q3Strategy, Strategy
 
+#: 决策方法注册表**惰性**暴露：``versioned`` 本身只登记字符串引用，
+#: 但保持惰性可以避免 ``python -m mathmodel2026b.versioned`` 触发
+#: runpy 的 "found in sys.modules" 警告（与 :data:`_LAZY` 同一处理）。
+_LAZY_NAMES = {
+    "DECISION_METHODS",
+    "MethodSpec",
+    "available_methods",
+    "build_method",
+    "describe_methods",
+}
+
 #: ``runner`` 会 import ``mock.server``；这里惰性导入，避免
 #: ``python -m mathmodel2026b.mock.server`` 触发 runpy 的 sys.modules 警告。
 _LAZY = {"RunConfig", "RunOutcome", "run_once"}
@@ -54,6 +69,10 @@ def __getattr__(name: str):
         from . import runner
 
         return getattr(runner, name)
+    if name in _LAZY_NAMES:
+        from . import versioned
+
+        return getattr(versioned, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
@@ -64,12 +83,14 @@ __all__ = [
     "Circle",
     "ClearKind",
     "ClearResult",
+    "DECISION_METHODS",
     "DogState",
     "EnterResult",
     "ExitResult",
     "HttpSimulatorClient",
     "MeasureKind",
     "MeasureResult",
+    "MethodSpec",
     "Point",
     "Q3BaselineStrategy",
     "Q3Params",
@@ -84,8 +105,11 @@ __all__ = [
     "SimulatorClient",
     "SimulatorError",
     "Strategy",
+    "available_methods",
+    "build_method",
     "covering_radius",
     "default_log_root",
+    "describe_methods",
     "feasible_region",
     "minimum_enclosing_circle",
     "polygon_diameter",
@@ -96,4 +120,4 @@ __all__ = [
     "summarize_index",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
