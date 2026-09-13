@@ -13,43 +13,47 @@
 | --- | --- |
 | 1 | **"TCP 握手成功" 不能证明连到了 Windows。** 只要链路上存在任何中间转发器（qemu `hostfwd`、`netsh portproxy`、`ssh -L`、`socat`），三次握手就由转发器在**本机内核**里完成，之后它再去连下游。下游不通时，客户端照样看到 ESTABLISHED，请求被吞掉、Windows 侧抓不到任何东西。 |
 | 2 | 本次故障（10:20 前）就是这个假象：Linux 侧 `127.0.0.1:2026` 的"服务端"其实是 **qemu 为 win10 用户态网卡做的 SLIRP 端口转发**，它把连接投递到 guest 的 `10.0.2.15:2026`，而模拟器**只监听 Windows 回环**，于是请求全部石沉大海。 |
-| 3 | 解法（已生效）：在 **Windows 内**把外部地址的 2026 转给回环 —— `netsh interface portproxy` + 防火墙放行 TCP 2026。 |
+| 3 | 现行方案（已生效）：**在 Windows 内跑一个 ~6.5 KB 的转发进程 `portrelay.exe`**，只绑 `192.168.122.161:2026` → 转发到 `127.0.0.1:2026`，由 SYSTEM 计划任务 `PortRelay` 开机自启（见 §3.7、§5.1）。qemu 用户态网卡只保留 SMB，不再做端口映射。 |
 | 4 | 修复后两条路径都实测可用，往返时延 ~1 ms，30 次串行请求 30/30 成功。 |
 | 5 | 真正的探活必须发**真实 HTTP 请求**（`GET /` 或 `POST /enter`）。实测：**门控关闭时裸 TCP connect 依旧 100% 成功**（0–3 ms）——它永远区分不出"可用"与"门控关"，也区分不出"链路通"与"只通到转发器"。 |
-| 6 | **portproxy 必须绑具体地址（`10.0.2.15` / `192.168.122.161`），绝不能绑 `0.0.0.0`。** 实测：portproxy 占住 `0.0.0.0:2026` 后，模拟器启动时 `startup.log` 写 `machine-dog API port 2026 is unavailable`，robot API 起不来（见 §3.5）。 |
+| 6 | **转发器绝不能绑 `0.0.0.0:2026`**：实测会让模拟器启动时报 `machine-dog API port 2026 is unavailable`（见 `startup.log`），robot API 起不来。`portrelay` 只绑 `192.168.122.161`，模拟器要用的 `127.0.0.1` / `[::1]` / 全地址绑定实测**仍然全部可用**（见 §3.5、§3.7）。 |
 | 7 | **Windows 的时区/时钟必须正确**：本机曾因时区为 Pacific Standard Time 使系统 UTC 偏差 **+15 小时**；模拟器据此判断是否已过测试截止时间，偏差可能导致直接拒绝开始测试（见 §3.6）。 |
 | 8 | **可以从 Linux 用 WinRM 直接操作 Windows 的 cmd.exe / powershell.exe**（本机 `pwsh` 缺 WSMan 客户端库，改用 pywinrm + NTLM，见 §4.4），改配置、看日志、验端口都不必到 VM 控制台。 |
 | 9 | **`request_id` 必须每次动作唯一**：复用同一个 id 的动作会被 HTTP **409** 拒绝（`{"accepted":false}`）。仓库里的 `HttpSimulatorClient` 每次调用都取 `uuid4().hex`，行为正确。 |
 | 10 | **完整协议已实测跑通**：`/enter → /measure → /exit` 全部 `accepted:true`，`measure_result`/`svd_deg` 正常返回（见 §3.4）。 |
 
-> **本次在 Windows 实机上做过的改动**（2026-09-13 11:2x，经 WinRM 执行，均可回滚）：
+> **本次在 Windows 实机上做过的改动**（2026-09-13 11:2x–11:3x，经 WinRM 执行，均可回滚）：
 > 1. 时区 `Set-TimeZone -Id 'China Standard Time'`，并用 Linux 的正确 UTC 校准系统时钟（见 §3.6）
-> 2. `portproxy`：删除 `0.0.0.0:2026` 那条，改为 `10.0.2.15:2026` 与 `192.168.122.161:2026` 两条（见 §3.5、§5.1）
-> 3. 未改动防火墙规则（`PortProxy 2026` 仍为 Allow / 所有配置文件）；未改动 libvirt 域 XML；未启动审计以外的任何程序
+> 2. 部署 `C:\protableTool\portrelay\portrelay.exe`（6.5 KB，源码 `portrelay.cs`）+ SYSTEM 计划任务 `PortRelay`
+>    （开机自启），仅绑 `192.168.122.161:2026` → `127.0.0.1:2026`（见 §3.7、§5.1）
+> 3. 删除此前由我加的两条 `netsh interface portproxy` 条目（历史方案，见 §3.5、§5.2）
+> 4. 未改动防火墙规则（`PortProxy 2026` 仍为 Allow / 所有配置文件）；未改动 libvirt 域 XML；未启动模拟器
 
 ---
 
-## 1. 本次实际拓扑与数据流
+## 1. 拓扑与数据流（现行架构）
 
 ```
-                      ┌──────────────────────────── Linux 宿主机 KFZPC ───────────────────────────┐
-                      │  192.168.122.1 (virbr0)          10.243.5.44 (wlan0)   0.0.0.0:2026        │
-                      │                                                       ↑ qemu SLIRP hostfwd │
-  run.py --mode live ─┤──(A) http://127.0.0.1:2026 ─────────────────────────────┘                    │
-                      │──(B) http://192.168.122.161:2026 ──┐                                        │
-                      └────────────────────────────────────┼────────────────────────────────────────┘
-                                                           │ virbr0 / e1000e
-                      ┌────────────────────────────────────▼────────────────────────────────────────┐
-                      │ libvirt domain `win10` (DESKTOP-VERJ953)                                    │
-                      │  网卡1 e1000e  network=default  MAC 52:54:00:be:40:07 → 192.168.122.161    │
-                      │  网卡2 e1000e  qemu user-mode(SLIRP) netdev=mynet.0 → 10.0.2.15            │
-                      │                                                                            │
-                      │  [IP Helper / netsh portproxy] 0.0.0.0:2026  ──┐                            │
-                      │  [Windows 防火墙] 入站放行 TCP 2026            │                            │
-                      │                                                ▼                            │
-                      │  [jammers-simulator.exe] LISTEN 127.0.0.1:2026 + [::1]:2026（只回环！）     │
-                      └────────────────────────────────────────────────────────────────────────────┘
+                      ┌──────────────────────── Linux 宿主机 KFZPC ────────────────────────┐
+   run.py --mode live ┤  --base-url http://192.168.122.161:2026                          │
+                      │  192.168.122.1 (virbr0)                                            │
+                      └──────────────────────────┬────────────────────────────────────────┘
+                                                 │ virbr0 / e1000e
+                      ┌──────────────────────────▼────────────────────────────────────────┐
+                      │ libvirt domain `win10` (DESKTOP-VERJ953)                           │
+                      │  网卡1 e1000e  network=default  MAC 52:54:00:be:40:07 → .122.161   │
+                      │  网卡2 e1000e  qemu user-mode(SLIRP) 10.0.2.15 —— 只用于 SMB 共享  │
+                      │                                                                    │
+                      │  [portrelay.exe]  LISTEN 192.168.122.161:2026  ──┐                 │
+                      │  [Windows 防火墙] 入站放行 TCP 2026               │                 │
+                      │  SYSTEM 计划任务 PortRelay（开机自启）            ▼                 │
+                      │  [jammers-simulator.exe] LISTEN 127.0.0.1:2026 + [::1]:2026（只回环）│
+                      └────────────────────────────────────────────────────────────────────┘
 ```
+
+历史形态（10:31–11:33）：宿主机侧曾依赖 qemu `hostfwd`（宿主机 `0.0.0.0:2026`）与 Windows `netsh portproxy`
+两条转发链，链路 A/B 都可用；因 §3.5（`0.0.0.0` 抢占回环导致模拟器起不来）与暴露面问题，
+已改为上图的单一 `portrelay` 方案（见 §3.7）。
 
 关键配置（实测来源）：
 
@@ -57,17 +61,17 @@
 | --- | --- | --- |
 | 虚机 | domain `win10`，uuid `ace1da7b-a203-4540-b3c3-ba85c519370c` | `virsh -c qemu:///system list` |
 | 网卡1 | `type='network'` → `network=default`/`virbr0`，MAC `52:54:00:be:40:07` → `192.168.122.161` | `virsh domiflist win10`、`/var/lib/libvirt/dnsmasq/virbr0.status` |
-| 网卡2 | `qemu:commandline`: `-netdev user,id=mynet.0,hostfwd=tcp::2026-:2026,smb=/home/kfz/share` + `-device e1000e,netdev=mynet.0,id=net1,addr=0x09.0` | `virsh dumpxml win10` |
-| 模拟器监听 | `127.0.0.1:2026`、`[::1]:2026`（PID 8352） | Windows `netstat -ano \| findstr 2026` |
-| 端口代理 | `0.0.0.0:2026`（PID 3284 = IP Helper / iphlpsvc） | 同上 |
-| 防火墙 | 入站规则 `PortProxy 2026`，TCP 2026 放行 | 本机添加 |
+| 网卡2 | `qemu:commandline`: `-netdev user,id=mynet.0,hostfwd=tcp::2026-:2026,smb=/home/kfz/share` + `-device e1000e,netdev=mynet.0,id=net1,addr=0x09.0`（hostfwd 待删除，只留 `smb=`） | `virsh dumpxml win10` |
+| 模拟器监听 | `127.0.0.1:2026`、`[::1]:2026` | Windows `netstat -ano \| findstr 2026` |
+| Windows 转发 | `portrelay.exe 192.168.122.161 2026 127.0.0.1 2026`（SYSTEM 计划任务 `PortRelay`） | `C:\protableTool\portrelay\`、`Get-ScheduledTask PortRelay` |
+| 防火墙 | 入站规则 `PortProxy 2026`，TCP 2026 放行（所有配置文件） | `Get-NetFirewallRule` |
 
-**两条可用路径（本次都验证通过）**
+**客户端侧**：由于默认的 `http://127.0.0.1:2026` 依赖已被弃用的 qemu 端口映射，
+启动策略时必须显式给出地址：
 
-- **A**：`http://127.0.0.1:2026` → qemu SLIRP hostfwd → guest `10.0.2.15:2026` → Windows portproxy → `127.0.0.1:2026` 模拟器
-- **B**：`http://192.168.122.161:2026` → virbr0 直连 guest → Windows portproxy → `127.0.0.1:2026` 模拟器
-
-`script/run.py` 默认就是 A（`DEFAULT_ROBOT_URL = http://127.0.0.1:2026`），无需加参数。
+```bash
+python3 script/run.py --mode live --base-url http://192.168.122.161:2026
+```
 
 ---
 
@@ -194,6 +198,8 @@ $ POST /enter  {"arena_id":"default"}（缺字段）   → HTTP 400 {"accepted":
    curl -s -X POST http://127.0.0.1:2026/exit -H 'Content-Type: application/json' \
      -d "{\"arena_id\":\"default\",\"robot_id\":\"<当前登录队号>\",\"request_id\":\"$(uuidgen | tr -d -)\"}"
    ```
+   > 上面是 10:39 当时的原始记录（走的是已弃用的 qemu 端口映射）。
+   > **现行架构下请把地址换成 `http://192.168.122.161:2026`**（见 §1、§3.7）。
 
 ### 3.5 端口归属冲突：portproxy 绑 `0.0.0.0` 会让模拟器再也起不来（实测）
 
@@ -217,7 +223,7 @@ bind 127.0.0.1:2026 -> 失败: An attempt was made to access a socket in a way f
 **这个方向不对称**：`先模拟器、后 portproxy` 能共存，`先 portproxy、后模拟器` 就直接废掉模拟器。
 （`0.0.0.0` 这个绑定还会在每次开机由 `iphlpsvc` 抢先建立，所以重启后必然踩坑。）
 
-修正后的配置（已生效，见 §5.1）：portproxy 分别绑 `10.0.2.15` 与 `192.168.122.161`，把回环让给模拟器。
+**过渡修正**（曾生效，现已由 §3.7 的 `portrelay` 取代，备选方案见 §5.2）：portproxy 分别绑 `10.0.2.15` 与 `192.168.122.161`，把回环让给模拟器。
 
 | 校验项 | 修正后实测 |
 | --- | --- |
@@ -260,6 +266,42 @@ Set-Date -Date ([TimeZoneInfo]::ConvertTimeFromUtc($ref, [TimeZoneInfo]::Local))
 
 遗留：`w32tm` 仍为 `Local CMOS Clock`（未同步 NTP），长期会缓慢漂移；正式测试前用 §4.4 复查一次即可。
 
+### 3.7 现行架构：Windows 侧轻量转发 `portrelay`（取代 portproxy 与 qemu 端口映射）
+
+**动机**：不再依赖 `netsh interface portproxy`（绑 `0.0.0.0` 会抢占回环，见 §3.5；条目还持久化在注册表里、不易察觉），
+也不再让 qemu 用户态网卡做端口映射（那会在宿主机上凭空多出一个 `0.0.0.0:2026` 监听，暴露面大）。
+qemu 用户态网卡从此只保留 SMB 文件共享。
+
+**实现**：`C:\protableTool\portrelay\portrelay.exe`——C# 写的极简 TCP 转发，`csc.exe` 编译，**6656 字节，零外部依赖**；
+调用形式 `portrelay.exe <监听地址> <监听端口> <目标地址> <目标端口>`，只绑指定地址（不绑 `0.0.0.0`），
+每个连接两条线程做双向 `CopyTo`；由 SYSTEM 计划任务 `PortRelay`（触发条件：开机）托管，日志写同目录 `portrelay.log`。
+
+**实测验证**（2026-09-13 11:33–11:36）：
+
+| 步骤 | 结果 |
+| --- | --- |
+| 编译 | `csc.exe /nologo /target:exe` → `portrelay.exe` = **6656 字节** ✅ |
+| 临时上游 `127.0.0.1:12026` + relay 指向它，**Windows 本地**自测 | `GET /selftest` → `{"marker":"TEST-UPSTREAM",...}` ✅ |
+| **从 Linux** `curl http://192.168.122.161:2026/relaytest` | `{"accepted":false,"marker":"TEST-UPSTREAM","first":"GET /relaytest HTTP/1.1"}`，1.5–4.7 ms ✅ |
+| 切到正式目标 `127.0.0.1:2026` 后 `netstat` | `192.168.122.161:2026 LISTENING 1164`（SYSTEM 会话 0）✅ |
+| `netsh interface portproxy show v4tov4` | 已清空 ✅ |
+| 端口共存（relay 占着 `192.168.122.161:2026`） | 绑 `127.0.0.1:2026` ✅ / `[::1]:2026` ✅ / `0.0.0.0:2026` ✅（模拟器可正常启动） |
+| 从 Linux `curl http://192.168.122.161:2026/`（模拟器尚未启动） | 2.05 s 后连接被关闭（curl 退码 56）——请求确实到达了 relay ✅ |
+
+> ⚠️ **用 `Start-Process` 从 WinRM 会话里起的进程会随该次 WinRM 调用结束被回收**（实测：命令一返回进程就消失，
+> Linux 侧表现为连接超时）。常驻进程一律交给**计划任务**托管。
+
+**客户端侧的变化**：默认的 `http://127.0.0.1:2026` 走的是宿主机上那个 qemu hostfwd，端口映射取消后即失效，
+所以从 Linux 跑策略要显式指定地址：
+
+```bash
+cd mathModel2026B
+python3 script/run.py --mode live --base-url http://192.168.122.161:2026
+```
+
+（`preflight.py` 的探测主机名硬编码为 `127.0.0.1`，只传 `--robot-port` 改不了地址；要一起探测就直接
+`curl -s -X POST http://192.168.122.161:2026/enter ...`，见 §4.2。）
+
 ---
 
 ## 4. 诊断命令（可直接复制）
@@ -278,10 +320,10 @@ sudo tcpdump -ni any -c 20 'tcp port 2026'   # 客户端请求时抓：只在 lo
 ### 4.2 真实 HTTP 探活（**唯一可信的判活方式**）
 
 ```bash
-# 只读、无副作用：能拿到 JSON 就说明链路通
-curl -sv --max-time 5 http://127.0.0.1:2026/
+# 只读、无副作用：能拿到 JSON 就说明链路通（现行地址是 VM 的 LAN IP，见 §3.7）
+curl -sv --max-time 5 http://192.168.122.161:2026/
 # 业务级探测：用错误 robot_id，被拒绝也不产生任何状态（正确队号请用 login-jammers 配置里的值）
-curl -s -X POST http://127.0.0.1:2026/enter -H 'Content-Type: application/json' \
+curl -s -X POST http://192.168.122.161:2026/enter -H 'Content-Type: application/json' \
      -d '{"arena_id":"default","robot_id":"000000000000","request_id":"probe"}'
 # 期望：HTTP 200 + {"accepted":false,...}
 ```
@@ -335,19 +377,59 @@ PY
 
 ---
 
-## 5. Windows 放行行为：怎么改、怎么查、怎么撤
+## 5. Windows 侧接入：转发器、放行与排查
 
 模拟器自身**硬绑 127.0.0.1/[::1]**（题面要求，`netstat` 里只会看到这两个回环地址），
-所以"让别的机器/宿主机能访问"这件事**完全由 portproxy + 防火墙两件事决定**，与模拟器设置里的"端口号"无关。
+所以"让宿主机能访问"这件事由**转发器 + 防火墙**两件事决定，与模拟器设置里的"端口号"无关。
 
-### 5.1 端口代理（netsh interface portproxy，需要管理员 CMD/PowerShell）
+### 5.1 现行方案：`portrelay`（SYSTEM 计划任务）
+
+| 文件 / 对象 | 说明 |
+| --- | --- |
+| `C:\protableTool\portrelay\portrelay.exe` | 转发器本体，**6656 字节**，`csc.exe` 编译，零外部依赖 |
+| `C:\protableTool\portrelay\portrelay.cs` | 源码（工作区副本 `_probe2026/portrelay.cs`） |
+| `C:\protableTool\portrelay\portrelay.log` | 启动 / 绑定失败 / 上游连接失败日志 |
+| `C:\protableTool\portrelay\testsrv.exe` | 验证用临时上游（5120 字节，平时不运行，可删） |
+| 计划任务 `PortRelay` | 开机以 **SYSTEM** 启动 `portrelay.exe 192.168.122.161 2026 127.0.0.1 2026` |
+
+日常运维（可在 VM 里执行，也可经 §4.4 的 WinRM 远程执行）：
+
+```powershell
+# 状态
+Get-ScheduledTask -TaskName PortRelay | Select-Object TaskName,State
+Get-Process portrelay | Select-Object Id,SessionId,StartTime
+netstat -ano | findstr ':2026'
+Get-Content 'C:\protableTool\portrelay\portrelay.log' -Tail 20
+
+# 重启
+Stop-ScheduledTask -TaskName PortRelay ; Start-ScheduledTask -TaskName PortRelay
+
+# 改目标（例如模拟器端口改成 2030）
+$act = New-ScheduledTaskAction -Execute 'C:\protableTool\portrelay\portrelay.exe' `
+         -Argument '192.168.122.161 2026 127.0.0.1 2030'
+Set-ScheduledTask -TaskName PortRelay -Action $act
+Stop-ScheduledTask -TaskName PortRelay ; Start-ScheduledTask -TaskName PortRelay
+
+# 停用 / 启用 / 卸载
+Disable-ScheduledTask -TaskName PortRelay ; Enable-ScheduledTask -TaskName PortRelay
+Stop-ScheduledTask -TaskName PortRelay ; Unregister-ScheduledTask -TaskName PortRelay -Confirm:$false
+Get-Process portrelay -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# 改源码后重新编译
+& "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:exe `
+  /out:'C:\protableTool\portrelay\portrelay.exe' 'C:\protableTool\portrelay\portrelay.cs'
+```
+
+> 想改任务名或安装路径：`Unregister-ScheduledTask` 后用新名字 `Register-ScheduledTask` 重建即可，与转发器本身无关。
+
+### 5.2 备选方案：`netsh interface portproxy`（历史方案，含陷阱）
 
 ```cmd
 :: 查看现状
 netsh interface portproxy show all
 netsh interface portproxy show v4tov4
 
-:: 当前采用（两条，都绑具体地址，把 127.0.0.1/[::1] 留给模拟器）
+:: 历史方案（现已弃用，仅作参考；若确要用，只绑具体地址，把 127.0.0.1/[::1] 留给模拟器）
 ::   · 10.0.2.15        服务 qemu SLIRP 路径（路径 A）
 ::   · 192.168.122.161  服务 virbr0 直连路径（路径 B）
 netsh interface portproxy add v4tov4 listenaddress=10.0.2.15       listenport=2026 connectaddress=127.0.0.1 connectport=2026
@@ -378,7 +460,7 @@ net start iphlpsvc
 - 绑 `10.0.2.15` = 只有路径 A 可用，暴露面更小。
 - 环境变化（换端口、换网段）后 `ipconfig` 确认地址再改。
 
-### 5.2 防火墙放行（当前规则）
+### 5.3 防火墙放行（当前规则）
 
 ```cmd
 :: 现状
@@ -406,7 +488,7 @@ Remove-NetFirewallRule -DisplayName "PortProxy 2026"
 netsh advfirewall firewall delete rule name="PortProxy 2026"
 ```
 
-### 5.3 网卡网络类别（虚拟网卡默认常被判为"公用网络"）
+### 5.4 网卡网络类别（虚拟网卡默认常被判为"公用网络"）
 
 默认"公用网络"配置文件**入站全拒**。若发现规则加了仍不通，先看类别：
 
@@ -416,7 +498,7 @@ Get-NetConnectionProfile | ft InterfaceAlias,InterfaceIndex,NetworkCategory,IPv4
 Set-NetConnectionProfile -InterfaceAlias "Ethernet 2" -NetworkCategory Private
 ```
 
-### 5.4 确认是"防火墙丢包"而不是别的问题
+### 5.5 确认是"防火墙丢包"而不是别的问题
 
 ```powershell
 # 打开被丢弃包的日志
@@ -440,34 +522,40 @@ netsh advfirewall set allprofiles state on
 
 ## 6. 启动 / 重启 SOP
 
-当前配置下是"常驻"的：portproxy 绑具体地址，模拟器随时启停都不冲突，**不需要每次删了再加**。
+转发器是常驻的（SYSTEM 计划任务，开机自启），模拟器随时启停都不冲突，**不需要每次清理端口**。
 
-1. 确认 portproxy 是具体地址两条（§5.1）——若是 `0.0.0.0` 那条，先删掉再加具体地址
+1. 确认 `portrelay` 在跑：`Get-ScheduledTask -TaskName PortRelay | ft TaskName,State`；
+   `netstat -ano | findstr :2026` 应有一条 `192.168.122.161:2026`（portrelay，SYSTEM）
 2. 启动模拟器 GUI（`C:\zWindowsUtility\Jammers-simulator-full\jammers-simulator-full.exe`）
-3. `netstat -ano | findstr :2026` 期望看到 **3 条**：`127.0.0.1:2026`、`[::1]:2026`（模拟器）+
-   `10.0.2.15:2026` / `192.168.122.161:2026`（IP Helper）
-   —— 若只有 IP Helper 那两条，去 `JammersSimulatorData\startup.log` 看是不是又报 `port 2026 is unavailable`
+3. `netstat -ano | findstr :2026` 现在应有 **3 条**：`127.0.0.1:2026`、`[::1]:2026`（模拟器）+ `192.168.122.161:2026`（portrelay）
+   —— 若只有 portrelay 那条，去 `JammersSimulatorData\startup.log` 看是不是又报 `port 2026 is unavailable`
 4. 在 GUI 里**开始演练/正式测试**（门控开启）
-5. **真实 HTTP 探测**：`curl -s --max-time 5 http://127.0.0.1:2026/` → 期望 `{"accepted":false,...}`
-6. 先在演练里跑 §3.4 的 30 秒烟测，再跑：`cd mathModel2026B && python3 script/run.py --mode live`
-   - 用非默认端口时：`--base-url http://127.0.0.1:<port>`，或先用 `preflight.py --robot-port <port>`
-   - 环境变量：`JAMMERS_ROBOT_PORT=<port>`（`preflight.py` / `run_practice_online.py` 都读它）
+5. **真实 HTTP 探测**：`curl -s --max-time 5 http://192.168.122.161:2026/` → 期望 `{"accepted":false,...}`
+6. 先在演练里跑 §3.4 的 30 秒烟测，再跑：
+   `cd mathModel2026B && python3 script/run.py --mode live --base-url http://192.168.122.161:2026`
+   - 换过端口时：portrelay 的**目标端口**（§5.1）和这里的 `--base-url` 要一起改
+   - 环境变量 `JAMMERS_ROBOT_PORT` 只能改端口，改不了主机名
+7. （可选）彻底去掉宿主机上遗留的 qemu 端口映射：`sudo virsh edit win10`，把
+   `-netdev user,id=mynet.0,hostfwd=tcp::2026-:2026,smb=/home/kfz/share`
+   改成 `-netdev user,id=mynet.0,smb=/home/kfz/share`（只留 SMB），重启域后宿主机不再有 `0.0.0.0:2026` 监听
 
-**万一还是遇到端口冲突**（历史上曾如此）：删 portproxy → 启模拟器 → 确认回环两条在 → 再加回具体地址两条。
+**万一还是遇到端口冲突**：`Stop-ScheduledTask PortRelay` → 启模拟器 → 确认回环两条在 → `Start-ScheduledTask PortRelay`。
 
 ---
 
 ## 7. 正式测试前 checklist
 
 - [ ] 时钟正确：`Get-TimeZone` = China Standard Time；`[DateTime]::UtcNow` 与 Linux `date -u` 相差 < 10 s（§3.6）
-- [ ] portproxy 是**具体地址**两条（绝不能有 `0.0.0.0:2026`），`iphlpsvc` = Running/Automatic
-- [ ] Windows `netstat` 里同时有 模拟器的 `127.0.0.1:2026`/`[::1]:2026` 与 IP Helper 的两条
+- [ ] 计划任务 `PortRelay` = Running；`netstat` 里有 `192.168.122.161:2026`（portrelay），且**没有** `0.0.0.0:2026`
+- [ ] 无残留 portproxy：`netsh interface portproxy show v4tov4` 为空
+- [ ] Windows `netstat` 里同时有 模拟器的 `127.0.0.1:2026`/`[::1]:2026` 与 portrelay 的 `192.168.122.161:2026`
 - [ ] `JammersSimulatorData\startup.log` 最后几行**没有** `machine-dog API port 2026 is unavailable`
 - [ ] 防火墙规则启用：`Get-NetFirewallRule -DisplayName "PortProxy 2026" | ft Enabled,Action,Profile`
-- [ ] GUI 里测试处于进行中（门控开）→ 此时 `curl http://127.0.0.1:2026/` 应返回 **JSON**
+- [ ] GUI 里测试处于进行中（门控开）→ 此时 `curl http://192.168.122.161:2026/` 应返回 **JSON**
       （若返回 `Empty reply`/`RemoteDisconnected`，说明门控还没开，见 §3.3，**不是网络问题**）
 - [ ] **先在演练里跑一遍 §3.4 的 30 秒烟测**（`/enter → /measure → /exit`，每个动作换新 `request_id`），
       全 `accepted:true` 再开正式测试
+- [ ] 启动命令带上地址：`python3 script/run.py --mode live --base-url http://192.168.122.161:2026`
 - [ ] `--mode live` 跑起来后，模拟器界面上的统计数据有变化（确认真有请求在走）
 - [ ] 记下 `/enter` 返回的 `remaining_real_duration_s`，据此安排正式测试的节奏
 - [ ] 演练/正式测试**中途不要改端口**（模拟器端口一改，portproxy、hostfwd、防火墙规则三处全部失效）
@@ -479,7 +567,9 @@ netsh advfirewall set allprofiles state on
 
 | 坑 | 现象 | 处理 |
 | --- | --- | --- |
-| **portproxy 绑 `0.0.0.0:2026`** | 模拟器启动时 `startup.log` 报 `machine-dog API port 2026 is unavailable`，robot API 不监听；重启后 `iphlpsvc` 抢先占位，必然复现 | 改成绑具体地址 `10.0.2.15` / `192.168.122.161`（§5.1、§3.5） |
+| **转发器绑 `0.0.0.0:2026`** | 模拟器启动时 `startup.log` 报 `machine-dog API port 2026 is unavailable`，robot API 不监听；重启后 `iphlpsvc`/转发器抢先占位，必然复现 | 只绑具体地址：`portrelay` 就只绑 `192.168.122.161`（§5.1）；历史 portproxy 方案见 §5.2 |
+| **从 WinRM 用 `Start-Process` 起常驻进程** | 命令一返回进程就被回收，Linux 侧表现为连接超时 | 常驻进程交给计划任务托管（`Register-ScheduledTask`，见 §3.7、§5.1） |
+| 客户端仍用默认 `127.0.0.1:2026` | 端口映射取消后该地址不再指向模拟器（宿主机上的 qemu hostfwd 打不到 guest 回环） | 跑策略时加 `--base-url http://192.168.122.161:2026`（§3.7） |
 | **Windows 时区/时钟不对** | 系统 UTC 与真实 UTC 差 15 小时（曾为 PST），模拟器误判"已过测试截止时间" | `Set-TimeZone -Id 'China Standard Time'` + 校时（§3.6） |
 | `smb=/home/kfz/share` 写死在 `qemu:commandline` | 目录不存在时 **qemu 直接启动失败**（`Error accessing shared directory`），虚机起不来 | 保证 `/home/kfz/share` 存在，或用 `virsh edit win10` 去掉 `smb=` |
 | `net1` 占 `addr=0x09.0` | 若把 qxl-vga 也放到 `0x1` 会报 `PCI: slot 1 function 0 not available ... in use by e1000e,id=net1` | 改 XML 时避开已用 `addr` |
@@ -503,7 +593,8 @@ netsh advfirewall set allprofiles state on
 | 虚机网络接口 | `virsh -c qemu:///system domiflist win10` |
 | libvirt DHCP 租约（确认 guest IP/主机名） | `/var/lib/libvirt/dnsmasq/virbr0.status` |
 | 宿主机谁占了端口 | `sudo ss -tlnp 'sport = :2026'` |
-| Windows portproxy 配置 | `netsh interface portproxy show all`；注册表 `HKLM\SYSTEM\CurrentControlSet\Services\PortProxy` |
+| **Windows 侧转发器** | `C:\protableTool\portrelay\`（`portrelay.exe` / `portrelay.cs` / `portrelay.log` / `testsrv.exe`），SYSTEM 计划任务 `PortRelay` |
+| Windows portproxy（历史方案，现已清空） | `netsh interface portproxy show all`；注册表 `HKLM\SYSTEM\CurrentControlSet\Services\PortProxy` |
 | Windows 防火墙规则 | `netsh advfirewall firewall show rule name="PortProxy 2026" verbose` |
 | Windows 防火墙拦截日志 | `%systemroot%\system32\LogFiles\Firewall\pfirewall.log` |
 | **模拟器启动日志（排端口冲突首选）** | `C:\zW\u200cindowsUtility\Jammers-simulator-full\JammersSimulatorData\startup.log` |
