@@ -30,8 +30,11 @@ from mathmodel2026b.mock.world import generate_case
 from mathmodel2026b.state import DogState
 from mathmodel2026b.versioned import (
     DECISION_METHODS,
+    INTERMEDIATE_ENTRIES,
+    ROUTE_ENTRIES,
     available_methods,
     build_method,
+    usable_routes,
 )
 
 ROBOT = "000000000000"
@@ -54,9 +57,10 @@ def _run(strategy, *, seed: int, directional: bool) -> dict:
 # --------------------------------------------------------------------------
 # 1. 注册表完整性
 # --------------------------------------------------------------------------
-def test_registry_covers_the_nine_documented_methods() -> None:
+def test_registry_covers_all_documented_methods() -> None:
     assert available_methods() == [
         "q3",
+        "matrix",
         "q3-v5",
         "q3-v6",
         "q3-v7",
@@ -65,20 +69,81 @@ def test_registry_covers_the_nine_documented_methods() -> None:
         "q4-v8",
         "q4-v9",
         "q4-v14",
+        "paper-q4",
     ]
 
 
 def test_exactly_two_final_methods_one_per_problem() -> None:
     finals = {k: v for k, v in DECISION_METHODS.items() if v.final}
     assert set(finals) == {"q3-v15", "q4-v14"}
-    assert finals["q3-v15"].problem == 3
-    assert finals["q4-v14"].problem == 4
+    assert finals["q3-v15"].problem == (3,)
+    assert finals["q4-v14"].problem == (4,)
 
 
 def test_problem_partition() -> None:
-    assert available_methods(3) == ["q3", "q3-v5", "q3-v6", "q3-v7", "q3-v8", "q3-v15"]
-    # q4-v8 属于问题4（它是"把全向 v8 直接套到定向场景"的反例臂）
-    assert available_methods(4) == ["q4-v8", "q4-v9", "q4-v14"]
+    # matrix 两边都能跑（problem=(3,4)），但它在问题4 上不达标（见下一个测试）
+    assert available_methods(3) == [
+        "q3",
+        "matrix",
+        "q3-v5",
+        "q3-v6",
+        "q3-v7",
+        "q3-v8",
+        "q3-v15",
+    ]
+    # paper-q4 只解问题4；q4-v8 是"把全向 v8 直接套到定向场景"的反例臂
+    assert available_methods(4) == ["matrix", "q4-v8", "q4-v9", "q4-v14", "paper-q4"]
+
+
+def test_each_problem_has_exactly_two_usable_routes() -> None:
+    """路线总览的硬约束：每个问题只有两条可用路线。
+
+    问题3：matrix ／ q3-v8、q3-v15（迭代优化版）
+    问题4：paper-q4 ／ q4-v14
+    排除项：原始 q3（过时）；问题4 上的 matrix、q4-v8、q4-v9（全清率不达标）
+    """
+    # 权威声明来自注册表，而不是本测试自己再算一遍
+    assert usable_routes(3) == ["matrix", "q3-v8", "q3-v15"]
+    assert usable_routes(4) == ["q4-v14", "paper-q4"]
+    # route_entry 标记必须与 ROUTE_ENTRIES 完全一致（模块导入时已自检，
+    # 这里再钉一次，防止有人把自检删掉）
+    declared = {
+        k for entries in ROUTE_ENTRIES.values() for v in entries.values() for k in v
+    }
+    flagged = {k for k, spec in DECISION_METHODS.items() if spec.route_entry}
+    assert declared == flagged
+    # 每个问题的路线数必须恰好是 2（1 独立 + 1~2 个迭代优化版入口）
+    for problem in (3, 4):
+        entries = ROUTE_ENTRIES[problem]
+        assert len(entries["independent"]) == 1, f"问题{problem} 应有 1 条独立解法路线"
+        assert 1 <= len(entries["iterated"]) <= 2, f"问题{problem} 的迭代优化版入口数异常"
+    # 中间代不得出现在可用路线里
+    for problem, mids in INTERMEDIATE_ENTRIES.items():
+        assert not set(mids) & set(usable_routes(problem))
+
+
+def test_q3_baseline_is_marked_outdated() -> None:
+    """原始 q3 线上 500~680 s/源，明显差于 matrix 与迭代优化版 ⇒ 标记过时。"""
+    spec = DECISION_METHODS["q3"]
+    assert spec.outdated is True
+    assert spec.final is False
+    assert "线上" in spec.effect
+
+
+def test_matrix_is_usable_for_q3_but_not_q4() -> None:
+    """matrix 是问题3 的路线A；在问题4 上 12/30（axial 也只 29/30）⇒ 排除。"""
+    spec = DECISION_METHODS["matrix"]
+    assert spec.separate_route is True
+    assert 3 in spec.problem
+    assert spec.fails_q4_requirement is True
+
+
+def test_paper_q4_is_a_q4_route_only() -> None:
+    """论文内核只解问题4；问题3 不采纳它（mock 上 567.39，比两者都慢）。"""
+    spec = DECISION_METHODS["paper-q4"]
+    assert spec.problem == (4,)
+    assert spec.separate_route is True
+    assert 3 not in spec.problem
 
 
 @pytest.mark.parametrize("key", available_methods())

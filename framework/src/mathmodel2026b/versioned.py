@@ -57,9 +57,15 @@ __all__ = [
     "Q4_DELIVERY_PARAMS",
     "VERSION_ORDER",
     "available_methods",
+    "INTERMEDIATE_ENTRIES",
+    "ROUTE_ENTRIES",
+    "method_tag",
+    "usable_routes",
     "build_method",
     "describe_methods",
     "q3_v5",
+    "paper_q4",
+    "q3_matrix",
     "q3_v6",
     "q3_v7",
     "q3_v8",
@@ -96,8 +102,11 @@ class MethodSpec:
     """一个可选决策方法的元数据。"""
 
     key: str
-    #: ``3`` = 全向（问题3），``4`` = 全向+定向混合（问题4）
-    problem: int
+    #: 适用的问题集合：``(3,)`` = 只能解问题3（全向）；
+    #: ``(4,)`` = 只能解问题4（全向+定向混合，需 ``--directional``）；
+    #: ``(3, 4)`` = 两者都能跑（例如 matrix 的代码路径两边都有，
+    #: 但它在问题4 上不满足"确保全部清除"，见 :attr:`fails_q4_requirement`）。
+    problem: tuple[int, ...]
     #: 参数 dataclass 的 "模块:类名"
     params_ref: str
     #: 策略类的 "模块:类名"
@@ -112,6 +121,16 @@ class MethodSpec:
     effect: str
     #: 是否属于"阶段性有益尝试"（非最终版但净收益为正，保留可选）
     beneficial_intermediate: bool = False
+    #: 是否是该问题"路线B（迭代优化版）"的**交付入口**之一。
+    #: ``final`` 只标最终版（每问题一个），但路线B 可以有两个并列入口
+    #: （问题3 的 ``q3-v8`` 在本仓库 mock 口径下优于 ``q3-v15``）。
+    route_entry: bool = False
+    #: 已过时的基线：仅用于回归/消融，**不应作为交付选项**
+    outdated: bool = False
+    #: 在**问题4**上不满足"确保全部清除"，因此不是问题4 的可选项
+    fails_q4_requirement: bool = False
+    #: 是否为"另一条独立路线"（不是历代版本，而是并列的另一种解法）
+    separate_route: bool = False
     #: 备注 / 使用约束
     note: str = ""
 
@@ -129,18 +148,49 @@ DECISION_METHODS: dict[str, MethodSpec] = {
     # ---------------- 问题3 ----------------
     "q3": MethodSpec(
         key="q3",
-        problem=3,
+        problem=(3,),
         params_ref="mathmodel2026b.strategy:Q3Params",
         strategy_ref="mathmodel2026b.strategy:Q3Strategy",
         overrides={},
         final=False,
+        outdated=True,
         adds="框架基线：全频道覆盖扫描 + 在线最近邻收尾 + 逼近半径 30/60/120/250",
-        effect="30 seed：avg_med 332.19 s/源，30/30 全清",
-        note="对照组，保留用于回归比较；不推荐上线。",
+        effect=(
+            "本仓库 mock 30 seed：332.19 s/源、30/30；**线上 5 场：542.9 / 626.1 / "
+            "392.8 / 641.6 / 677.0 s/源（中位 641.6）**"
+        ),
+        note=(
+            "⚠️ **已过时的基线，不要作为问题3 的交付选项**：线上实测 500~680 s/源，"
+            "明显差于 matrix（330 量级）与迭代优化版（267~274）。"
+            "保留它只为回归比较与『历代改了多少』的量化。"
+        ),
+    ),
+    "matrix": MethodSpec(
+        key="matrix",
+        problem=(3, 4),
+        params_ref="mathmodel2026b.strategy_matrix:MatrixParams",
+        strategy_ref="mathmodel2026b.strategy_matrix:KnowledgeSearchStrategy",
+        overrides={},
+        final=False,
+        separate_route=True,
+        route_entry=True,
+        fails_q4_requirement=True,
+        adds=(
+            "**另一条独立路线**（不是历代版本）：知识矩阵(channel×path) + "
+            "在线覆盖证书 + 有效接收半径在线夹逼 + 集合覆盖缺口补测"
+        ),
+        effect="本仓库 mock 30 seed：330.24 s/源、30/30（对照 q3 332.19、q3-v8 267.19）",
+        note=(
+            "问题3 的**路线 A**，与迭代优化版并列可选。"
+            "⚠️ 两点必须记住：(a) matrix **没有线上演练记录**，其 330 是 mock 数字，"
+            "不能与 q3 的线上 500~680 s 直接比较，要作最终选择必须先补官方模拟器场次；"
+            "(b) 它在**问题4 上不可选**：默认 polygon 布局 12/30，"
+            "配 scan_layout=axial 也只到 29/30（漏 seed 6 的退化交会几何）。"
+        ),
     ),
     "q3-v5": MethodSpec(
         key="q3-v5",
-        problem=3,
+        problem=(3,),
         params_ref="mathmodel2026b.strategy_v5:Q3V5Params",
         strategy_ref="mathmodel2026b.strategy_v5:Q3V5Strategy",
         overrides={},
@@ -155,7 +205,7 @@ DECISION_METHODS: dict[str, MethodSpec] = {
     ),
     "q3-v6": MethodSpec(
         key="q3-v6",
-        problem=3,
+        problem=(3,),
         params_ref="mathmodel2026b.strategy_v6:Q3V6Params",
         strategy_ref="mathmodel2026b.strategy_v6:Q3V6Strategy",
         overrides={"schedule_min_readings": SCHEDULE_MIN_READINGS},
@@ -167,7 +217,7 @@ DECISION_METHODS: dict[str, MethodSpec] = {
     ),
     "q3-v7": MethodSpec(
         key="q3-v7",
-        problem=3,
+        problem=(3,),
         params_ref="mathmodel2026b.strategy_v7:Q3V7Params",
         strategy_ref="mathmodel2026b.strategy_v7:Q3V7Strategy",
         overrides={"schedule_min_readings": SCHEDULE_MIN_READINGS},
@@ -183,7 +233,7 @@ DECISION_METHODS: dict[str, MethodSpec] = {
     ),
     "q3-v8": MethodSpec(
         key="q3-v8",
-        problem=3,
+        problem=(3,),
         params_ref="mathmodel2026b.strategy_v8:Q3V8Params",
         strategy_ref="mathmodel2026b.strategy_v8:Q3V8Strategy",
         overrides={"schedule_min_readings": SCHEDULE_MIN_READINGS},
@@ -191,6 +241,7 @@ DECISION_METHODS: dict[str, MethodSpec] = {
         adds="**直接清优先**：走到估计点先 /clear（失败仅 5s，与一次检测同价），失败再精定位",
         effect="本仓库 mock 30 seed：267.19 s/源、30/30 全清（与归档逐位一致，见 framework/tests/test_versioned_strategies.py::test_v8_reproduces_archived_30_seed_median）",
         beneficial_intermediate=True,
+        route_entry=True,
         note=(
             "问题3 的关键解锁点：MEC>20m **不等于**估计点偏离 >20m（可行域可能是细长条），"
             "所以不必为了补读数多绕一趟。它也是问题4 全部版本（v9/v14）的基类。"
@@ -198,7 +249,7 @@ DECISION_METHODS: dict[str, MethodSpec] = {
     ),
     "q3-v15": MethodSpec(
         key="q3-v15",
-        problem=3,
+        problem=(3,),
         params_ref="mathmodel2026b.strategy_v15:Q3V15Params",
         strategy_ref="mathmodel2026b.strategy_v15:Q3V15Strategy",
         overrides={
@@ -206,21 +257,45 @@ DECISION_METHODS: dict[str, MethodSpec] = {
             "or_opt_passes": OR_OPT_PASSES,
         },
         final=True,
+        route_entry=True,
         adds="**no_signal 排除区修正估计点**（全向源在 B 处 no_signal ⟹ 真值在 disk(B,1000) 外）",
-        effect="本仓库 mock 30 seed：273.73 s/源、30/30；归档交付口径 264.81（v8 267.19）。本仓库 mock 上该机制为 −6.5 s/源的回归，见 docs/q34-version-lineage.md §2.2",
+        effect="本仓库 mock 30 seed：273.73 s/源、30/30；归档交付口径 264.81（v8 267.19）。本仓库 mock 上该机制为 −6.5 s/源的回归，见 docs/q34-version-lineage.md §2.3",
         note=(
             "本仓库问题3 最终交付版。可行域（用于 MEC≤20 判据）**不变**，只是让调度锚点"
             "与直接清的命中点更准。or-opt 默认关闭（中性项）。"
         ),
     ),
     # ---------------- 问题4 ----------------
+    "paper-q4": MethodSpec(
+        key="paper-q4",
+        problem=(4,),
+        params_ref="mathmodel2026b.strategy:Q3Params",
+        strategy_ref="mathmodel2026b.strategy_q4:Q4Strategy",
+        overrides={},
+        final=False,
+        separate_route=True,
+        route_entry=True,
+        adds=(
+            "**另一条独立路线**：队友论文的冻结内核 —— 31 点轴向三角网格(s=950)"
+            " + 楔形交会 + 双假设辨识 + 正面 NBV 枚举 + 矩形兜底清扫"
+        ),
+        effect="本仓库 mock 30 seed：1308.84 s/源、30/30 全清（q4-v14 为 513.66、同为 30/30）",
+        note=(
+            "问题4 的**路线 A**，唯一在 5 个真实画像代理上 5/5 全清的路线，"
+            "也是『能证明全覆盖』的兜底（发现层局部凸包证书 + 矩形兜底证明）。"
+            "⚠️ 只解问题4，必须配 --directional；问题3 **不采纳**它"
+            "（mock 上 567.39 s/源，比 matrix 与迭代优化版都慢）。"
+            "内核冻结，勿就地修改。"
+        ),
+    ),
     "q4-v8": MethodSpec(
         key="q4-v8",
-        problem=4,
+        problem=(4,),
         params_ref="mathmodel2026b.strategy_v8:Q3V8Params",
         strategy_ref="mathmodel2026b.strategy_v8:Q3V8Strategy",
         overrides={"schedule_min_readings": SCHEDULE_MIN_READINGS},
         final=False,
+        fails_q4_requirement=True,
         adds="把 v8（全向）直接套到定向场景",
         effect=(
             "本仓库 mock 30 seed：仅 10/30 全清（7 点环布局的朝向覆盖不完备）；"
@@ -233,7 +308,7 @@ DECISION_METHODS: dict[str, MethodSpec] = {
     ),
     "q4-v9": MethodSpec(
         key="q4-v9",
-        problem=4,
+        problem=(4,),
         params_ref="mathmodel2026b.strategy_v9:Q4V9Params",
         strategy_ref="mathmodel2026b.strategy_v9:Q4V9Strategy",
         overrides={"schedule_min_readings": SCHEDULE_MIN_READINGS},
@@ -244,6 +319,7 @@ DECISION_METHODS: dict[str, MethodSpec] = {
         ),
         effect="本仓库 mock 30 seed：647.31 s/源、23/30 全清（对照 q4-v8 10/30、matrix-axial 29/30）；上游归档 10 seed 546.28（v8 直接套用 793.48）",
         beneficial_intermediate=True,
+        fails_q4_requirement=True,
         note=(
             "阶段性有益尝试：把发现层从轴向网格 31 点/28500m 压到 25 点/18828m，"
             "同时保持朝向完备（最坏正面距离 ≤1000m）。**但它仍会漏清**："
@@ -252,11 +328,12 @@ DECISION_METHODS: dict[str, MethodSpec] = {
     ),
     "q4-v14": MethodSpec(
         key="q4-v14",
-        problem=4,
+        problem=(4,),
         params_ref="mathmodel2026b.strategy_v14:Q4V14Params",
         strategy_ref="mathmodel2026b.strategy_v14:Q4V14Strategy",
         overrides={},
         final=True,
+        route_entry=True,
         adds=(
             "**沿射线推进**（walk-the-ray）二分精定位 + 区间平移继承 + 地毯式清除"
             " + 同点免重测 + 失败点免重清"
@@ -271,9 +348,55 @@ DECISION_METHODS: dict[str, MethodSpec] = {
     ),
 }
 
-#: 推荐浏览顺序（从基线到最终版）。
+#: **每个问题的可选路线**：``问题 -> (路线A(独立解法), 路线B(迭代优化版))``。
+#: 这是"哪些方法可以真正用于交付"的**唯一权威声明**，``script/list_methods.py``
+#: 与 ``framework/tests/test_versioned_strategies.py`` 都消费它，避免两处口径漂移。
+#:
+#: 问题3：``matrix``（知识矩阵）与 ``q3-v8``/``q3-v15``（同一血脉的迭代优化版）；
+#:        原始 ``q3`` 已过时（线上 500~680 s/源）。
+#: 问题4：``paper-q4``（论文冻结内核）与 ``q4-v14``（迭代优化版）；
+#:        整条 matrix 路线（默认 12/30、axial 29/30）与 ``q4-v8``（10/30）、
+#:        ``q4-v9``（23/30）都不满足"确保全部清除"。
+ROUTE_ENTRIES: dict[int, dict[str, tuple[str, ...]]] = {
+    3: {"independent": ("matrix",), "iterated": ("q3-v8", "q3-v15")},
+    4: {"independent": ("paper-q4",), "iterated": ("q4-v14",)},
+}
+
+#: 路线内部的中间代（净收益为正，但不作为交付入口；供消融/回顾）。
+INTERMEDIATE_ENTRIES: dict[int, tuple[str, ...]] = {
+    3: ("q3-v5", "q3-v6", "q3-v7"),
+    4: ("q4-v9",),
+}
+
+
+def _validate_route_model() -> None:
+    """启动时自检：``route_entry`` 标记必须与 :data:`ROUTE_ENTRIES` 一致。
+
+    两处声明一旦漂移，"清单里能选但测试说不可选"这类不一致就会悄悄发生。
+    """
+    declared = {k for entries in ROUTE_ENTRIES.values() for v in entries.values() for k in v}
+    flagged = {k for k, spec in DECISION_METHODS.items() if spec.route_entry}
+    if declared != flagged:
+        raise AssertionError(
+            "路线声明漂移：ROUTE_ENTRIES=%s 与 route_entry 标记=%s 不一致"
+            % (sorted(declared), sorted(flagged))
+        )
+
+
+def usable_routes(problem: int) -> list[str]:
+    """返回某问题的全部可用路线入口（路线A + 路线B，按 :data:`VERSION_ORDER`）。"""
+    entries = ROUTE_ENTRIES.get(problem, {})
+    flat = set(entries.get("independent", ())) | set(entries.get("iterated", ()))
+    return [k for k in VERSION_ORDER if k in flat]
+
+
+_validate_route_model()
+
+#: 推荐浏览顺序（先按问题，再按"路线 → 历代"）。
+#: ``matrix`` 是问题3 的**路线 A**（并列的独立解法），放在历代版本之前。
 VERSION_ORDER: tuple[str, ...] = (
     "q3",
+    "matrix",
     "q3-v5",
     "q3-v6",
     "q3-v7",
@@ -282,6 +405,7 @@ VERSION_ORDER: tuple[str, ...] = (
     "q4-v8",
     "q4-v9",
     "q4-v14",
+    "paper-q4",
 )
 
 
@@ -293,7 +417,7 @@ def available_methods(problem: int | None = None) -> list[str]:
     keys = [k for k in VERSION_ORDER if k in DECISION_METHODS]
     if problem is None:
         return keys
-    return [k for k in keys if DECISION_METHODS[k].problem == problem]
+    return [k for k in keys if problem in DECISION_METHODS[k].problem]
 
 
 def build_method(key: str, **param_overrides: Any):
@@ -314,17 +438,35 @@ def build_method(key: str, **param_overrides: Any):
     return strategy_cls(params)
 
 
+def method_tag(spec: "MethodSpec") -> str:
+    """单个方法的状态标签（``list_methods.py`` 也用它，保证口径一致）。"""
+    if spec.final:
+        return "★ 最终交付"
+    if spec.outdated:
+        return "✗ 已过时"
+    if spec.separate_route:
+        return "◇ 独立路线"
+    if spec.route_entry and spec.beneficial_intermediate:
+        return "◆ 阶段有益（同时是路线B 入口）"
+    if spec.beneficial_intermediate:
+        return "◆ 阶段有益"
+    return "· 对照/反例"
+
+
 def describe_methods(problem: int | None = None, *, verbose: bool = False) -> str:
     """渲染决策方法清单（供 ``script/list_methods.py`` 与文档引用）。"""
     lines: list[str] = []
     for key in available_methods(problem):
         spec = DECISION_METHODS[key]
-        tag = "★ 最终交付" if spec.final else (
-            "◆ 阶段有益" if spec.beneficial_intermediate else "· 对照/反例"
-        )
-        lines.append(f"{key:<9} P{spec.problem}  {tag}")
+        lines.append(f"{key:<9} P{spec.problem}  {method_tag(spec)}")
+        if spec.separate_route:
+            lines.append("          【另一条独立路线，非历代版本】")
         lines.append(f"          新增：{spec.adds}")
         lines.append(f"          效果：{spec.effect}")
+        if spec.outdated:
+            lines.append("          ⚠️ 已过时：不要作为交付选项，仅用于回归/消融")
+        if spec.fails_q4_requirement:
+            lines.append("          ⚠️ 在问题4 上不满足『确保全部清除』，不是问题4 的可选项")
         if verbose and spec.note:
             lines.append(f"          备注：{spec.note}")
         if verbose and spec.overrides:
@@ -404,8 +546,23 @@ def _selftest() -> int:
             continue
         print(f"  OK   {key:<9} -> {type(strategy).__name__}")
     print(f"\n{len(available_methods())} 个决策方法，{failures} 个构造失败")
+    print("问题3 可选路线：matrix ／ q3-v8、q3-v15；问题4 可选路线：paper-q4 ／ q4-v14")
     return 1 if failures else 0
 
 
 if __name__ == "__main__":
     raise SystemExit(_selftest())
+
+
+def q3_matrix(params: Any | None = None):
+    """问题3 的**路线 A**：知识矩阵策略（``--strategy matrix`` 的同义入口）。"""
+    from .strategy_matrix import KnowledgeSearchStrategy, MatrixParams
+
+    return KnowledgeSearchStrategy(params or MatrixParams())
+
+
+def paper_q4(params: Any | None = None):
+    """问题4 的**路线 A**：论文冻结内核适配器（``--strategy paper-q4`` 的同义入口）。"""
+    from .strategy_q4 import Q4Strategy as PaperQ4Strategy
+
+    return PaperQ4Strategy(params)
